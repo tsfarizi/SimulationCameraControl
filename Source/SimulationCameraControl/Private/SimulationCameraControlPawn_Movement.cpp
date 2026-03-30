@@ -51,14 +51,16 @@ void ASimulationCameraControl::Orbit(FVector2D AxisValue)
 		return;
 	}
 
-	FRotator NewRotation = SpringArm->GetRelativeRotation();
+	// Update target rotation for smooth interpolation in Tick
+	FRotator NewRotation = TargetRelativeRotation;
 	NewRotation.Yaw   += AxisValue.X * OrbitYawSpeed   * DeltaSeconds;
 	NewRotation.Pitch  = FMath::Clamp(NewRotation.Pitch + AxisValue.Y * OrbitPitchSpeed * DeltaSeconds, MinPitch, MaxPitch);
 	NewRotation.Roll   = 0.0f;
 
-	SpringArm->SetRelativeRotation(NewRotation);
-	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Orbit result: NewRot=%s Arm=%.2f"),
-		*NewRotation.ToCompactString(), SpringArm->TargetArmLength);
+	TargetRelativeRotation = NewRotation;
+
+	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Orbit result: TargetRot=%s Arm=%.2f"),
+		*TargetRelativeRotation.ToCompactString(), TargetArmLength);
 }
 
 void ASimulationCameraControl::Pan(FVector2D AxisValue)
@@ -110,7 +112,8 @@ void ASimulationCameraControl::Pan(FVector2D AxisValue)
 		return;
 	}
 
-	SetActorLocation(NewLocation);
+	// Update target location for smooth interpolation in Tick
+	TargetActorLocation = NewLocation;
 
 	if (bHasCachedFocus)
 	{
@@ -124,8 +127,8 @@ void ASimulationCameraControl::Pan(FVector2D AxisValue)
 		bHasCachedFocus = true;
 	}
 
-	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Pan result: Movement=%s NewLoc=%s"),
-		*Movement.ToCompactString(), *NewLocation.ToCompactString());
+	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Pan result: Movement=%s TargetLoc=%s"),
+		*Movement.ToCompactString(), *TargetActorLocation.ToCompactString());
 }
 
 void ASimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& FocusPoint)
@@ -154,7 +157,7 @@ void ASimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& 
 
 	if (FMath::IsNearlyZero(ArmDelta, KINDA_SMALL_NUMBER_CM))
 	{
-		SpringArm->TargetArmLength = ClampedArm;
+		TargetArmLength = ClampedArm;
 		return;
 	}
 
@@ -165,7 +168,7 @@ void ASimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& 
 		if (!RayDir.Normalize())
 		{
 			UE_LOG(LogSimulationCameraControl, Warning, TEXT("ApplyZoom: unable to determine ray direction."));
-			SpringArm->TargetArmLength = ClampedArm;
+			TargetArmLength = ClampedArm;
 			return;
 		}
 	}
@@ -178,18 +181,19 @@ void ASimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& 
 	if (!IsVectorFinite(NewPawnLocation))
 	{
 		UE_LOG(LogSimulationCameraControl, Warning, TEXT("ApplyZoom aborted: computed non-finite pawn location."));
-		SpringArm->TargetArmLength = ClampedArm;
+		TargetArmLength = ClampedArm;
 		return;
 	}
 
-	SetActorLocation(NewPawnLocation);
-	SpringArm->TargetArmLength = ClampedArm;
+	// Update target values for smooth interpolation in Tick
+	TargetArmLength = ClampedArm;
+	TargetActorLocation = NewPawnLocation;
 
 	LastValidHitLocation = FocusPoint;
 	bHasCachedFocus = true;
 
-	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("ApplyZoom result: Pawn %s -> %s, Cam'=%s"),
-		*PawnLocation.ToCompactString(), *NewPawnLocation.ToCompactString(), *NewCameraLocation.ToCompactString());
+	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("ApplyZoom result: TargetArm=%.2f TargetLoc=%s"),
+		TargetArmLength, *TargetActorLocation.ToCompactString());
 
 	if (bDebug && GetWorld())
 	{

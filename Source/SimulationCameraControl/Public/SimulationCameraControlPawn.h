@@ -2,9 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
-#include "UObject/SoftObjectPath.h"
 #include "SimulationCameraControlPawn.generated.h"
 
+// Forward declarations for faster compile time
 class UCameraComponent;
 class USpringArmComponent;
 class USceneComponent;
@@ -14,7 +14,7 @@ struct FInputActionInstance;
 
 /**
  * Specialized camera pawn for simulation controls.
- * Implements RTS-style camera controls (Zoom, Orbit, Pan).
+ * Implements RTS-style camera controls (Zoom, Orbit, Pan) with smooth interpolation.
  */
 UCLASS()
 class SIMULATIONCAMERACONTROL_API ASimulationCameraControl : public APawn
@@ -26,6 +26,7 @@ public:
 
 	//~ Begin APawn Interface
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void PawnClientRestart() override;
@@ -33,7 +34,7 @@ public:
 
 	/**
 	 * Enables or disables all camera input (e.g., when cursor hovers UI widgets).
-	 * Caller: Enhanced Input IA_* bound to UI focus events.
+	 * Caller: Enhanced Input System IA_* bound to UI focus events.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
 	void SetInputEnabled(bool bInEnabled);
@@ -59,7 +60,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
 	void Pan(FVector2D AxisValue);
 
-	//Setter BP-callable
+	// Setter BP-callable
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
 	void SetDefaultInputMapping(UInputMappingContext* InContext);
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
@@ -138,24 +139,53 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputMappingContext> DefaultInputMapping;
 
-	/** Name of the Enhanced Input action driving Zoom(float). */
-	FName ZoomActionName = "IA_Zoom";
+	/** Input action for Zoom (float axis). Assign in Blueprint or via DefaultInputMapping. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> ZoomAction;
 
-	/** Name of the Enhanced Input action driving Orbit(FVector2D). */
-	FName OrbitActionName = "IA_Orbit";
+	/** Input action for Orbit (2D axis). Assign in Blueprint or via DefaultInputMapping. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> OrbitAction;
 
-	/** Name of the Enhanced Input action driving Orbit Modifier (bool). */
-	FName OrbitModifierActionName = "IA_Orbit_Modifier";
+	/** Input action for Orbit Modifier (bool). Assign in Blueprint or via DefaultInputMapping. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> OrbitModifierAction;
 
-	/** Name of the Enhanced Input action driving Pan(FVector2D). */
-	FName PanActionName = "IA_Pan";
+	/** Input action for Pan (2D axis). Assign in Blueprint or via DefaultInputMapping. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> PanAction;
 
-	/** Name of the Enhanced Input action driving Pan Modifier (bool). */
-	FName PanModifierActionName = "IA_Pan_Modifier";
+	/** Input action for Pan Modifier (bool). Assign in Blueprint or via DefaultInputMapping. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UInputAction> PanModifierAction;
 
 	/** Priority applied when registering the mapping context; higher values win conflicts. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
 	int32 InputMappingPriority = 0;
+
+	/** Interpolation speed for zoom smoothing (arm length). Higher = faster response. Safe range: 5.0-30.0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
+	float ZoomInterpSpeed = 15.0f;
+
+	/** Interpolation speed for orbit smoothing (rotation). Higher = faster response. Safe range: 5.0-30.0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
+	float OrbitInterpSpeed = 15.0f;
+
+	/** Interpolation speed for pan smoothing (location). Higher = faster response. Safe range: 5.0-30.0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
+	float PanInterpSpeed = 15.0f;
+
+	/** Enables smooth interpolation for zoom. Disable for instant response. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing")
+	bool bSmoothZoom = true;
+
+	/** Enables smooth interpolation for orbit. Disable for instant response. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing")
+	bool bSmoothOrbit = true;
+
+	/** Enables smooth interpolation for pan. Disable for instant response. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing")
+	bool bSmoothPan = true;
 
 private:
 	/** Returns cursor world point, preferring hits then falling back to GroundZ plane; logs failure reasons. */
@@ -196,4 +226,17 @@ private:
 
 	/** Tracks whether the Pan Modifier (Middle Mouse) is held down. */
 	bool bIsPanModifierDown = false;
+
+	// Smoothing state variables
+	/** Target arm length for smooth zoom interpolation. */
+	float TargetArmLength = 400.0f;
+
+	/** Target relative rotation for smooth orbit interpolation. */
+	FRotator TargetRelativeRotation = FRotator(-60.0f, 0.0f, 0.0f);
+
+	/** Target actor location for smooth pan interpolation. */
+	FVector TargetActorLocation = FVector::ZeroVector;
+
+	/** Tracks if initial target values have been set. */
+	bool bTargetsInitialized = false;
 };

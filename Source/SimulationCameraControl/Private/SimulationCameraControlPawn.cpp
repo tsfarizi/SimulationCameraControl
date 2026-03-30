@@ -1,16 +1,15 @@
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "InputMappingContext.h"
 
 DEFINE_LOG_CATEGORY(LogSimulationCameraControl);
 
 ASimulationCameraControl::ASimulationCameraControl()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// Enable Tick for smooth interpolation
+	PrimaryActorTick.bCanEverTick = true;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
@@ -32,12 +31,9 @@ ASimulationCameraControl::ASimulationCameraControl()
 
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
 
-	// Set default input mapping to IMC_BaseSimulation
-	static ConstructorHelpers::FObjectFinder<UInputMappingContext> DefaultContext(TEXT("/Game/Input/IMC_BaseSimulation.IMC_BaseSimulation"));
-	if (DefaultContext.Succeeded())
-	{
-		DefaultInputMapping = DefaultContext.Object;
-	}
+	// Initialize target values for smoothing
+	TargetArmLength = SpringArm->TargetArmLength;
+	TargetRelativeRotation = SpringArm->GetRelativeRotation();
 }
 
 void ASimulationCameraControl::BeginPlay()
@@ -54,9 +50,77 @@ void ASimulationCameraControl::BeginPlay()
 	if (SpringArm)
 	{
 		SpringArm->TargetArmLength = FMath::Clamp(SpringArm->TargetArmLength, MinArmLength, MaxArmLength);
+		TargetArmLength = SpringArm->TargetArmLength;
+		TargetRelativeRotation = SpringArm->GetRelativeRotation();
+		TargetActorLocation = GetActorLocation();
+		bTargetsInitialized = true;
 	}
 
 	InitializeInputMapping();
+}
+
+void ASimulationCameraControl::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (DeltaTime <= 0.0f || !SpringArm)
+	{
+		return;
+	}
+
+	// Smooth zoom interpolation (arm length)
+	if (bSmoothZoom)
+	{
+		const float CurrentArmLength = SpringArm->TargetArmLength;
+		const float NewArmLength = FMath::FInterpTo(CurrentArmLength, TargetArmLength, DeltaTime, ZoomInterpSpeed);
+		SpringArm->TargetArmLength = FMath::Clamp(NewArmLength, MinArmLength, MaxArmLength);
+	}
+	else
+	{
+		SpringArm->TargetArmLength = FMath::Clamp(TargetArmLength, MinArmLength, MaxArmLength);
+	}
+
+	// Smooth orbit interpolation (rotation)
+	if (bSmoothOrbit)
+	{
+		const FRotator CurrentRotation = SpringArm->GetRelativeRotation();
+		FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRelativeRotation, DeltaTime, OrbitInterpSpeed);
+		NewRotation.Pitch = FMath::Clamp(NewRotation.Pitch, MinPitch, MaxPitch);
+		NewRotation.Roll = 0.0f;
+		SpringArm->SetRelativeRotation(NewRotation);
+	}
+	else
+	{
+		FRotator ClampedRotation = TargetRelativeRotation;
+		ClampedRotation.Pitch = FMath::Clamp(ClampedRotation.Pitch, MinPitch, MaxPitch);
+		ClampedRotation.Roll = 0.0f;
+		SpringArm->SetRelativeRotation(ClampedRotation);
+	}
+
+	// Smooth pan interpolation (location)
+	if (bSmoothPan)
+	{
+		const FVector CurrentLocation = GetActorLocation();
+		FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetActorLocation, DeltaTime, PanInterpSpeed);
+		NewLocation.Z = CurrentLocation.Z; // Maintain Z height
+		SetActorLocation(NewLocation);
+
+		if (bHasCachedFocus)
+		{
+			LastValidHitLocation += (NewLocation - CurrentLocation);
+		}
+	}
+	else
+	{
+		FVector NewLocation = TargetActorLocation;
+		NewLocation.Z = GetActorLocation().Z; // Maintain Z height
+		SetActorLocation(NewLocation);
+
+		if (bHasCachedFocus)
+		{
+			LastValidHitLocation += (NewLocation - GetActorLocation());
+		}
+	}
 }
 
 void ASimulationCameraControl::PossessedBy(AController* NewController)

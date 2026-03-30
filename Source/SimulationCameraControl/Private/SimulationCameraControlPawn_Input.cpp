@@ -24,41 +24,54 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 		return;
 	}
 
-	if (!DefaultInputMapping)
+	// Bind input actions directly using TObjectPtr<UInputAction> variables
+	// This removes the need for FName-based iteration and hardcoded paths
+
+	if (ZoomAction)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: DefaultInputMapping is not set."));
-		return;
+		EnhancedComponent->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleZoomAction);
+	}
+	else
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: ZoomAction not set."));
 	}
 
-	for (const FEnhancedActionKeyMapping& Mapping : DefaultInputMapping->GetMappings())
+	if (OrbitAction)
 	{
-		if (Mapping.Action)
-		{
-			const FName ActionName = Mapping.Action->GetFName();
+		EnhancedComponent->BindAction(OrbitAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitAction);
+	}
+	else
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: OrbitAction not set."));
+	}
 
-			if (ActionName == ZoomActionName)
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleZoomAction);
-			}
-			else if (ActionName == OrbitActionName)
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitAction);
-			}
-			else if (ActionName == OrbitModifierActionName)
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-			}
-			else if (ActionName == PanActionName)
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanAction);
-			}
-			else if (ActionName == PanModifierActionName)
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanModifierAction);
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandlePanModifierAction);
-			}
-		}
+	if (OrbitModifierAction)
+	{
+		EnhancedComponent->BindAction(OrbitModifierAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitModifierAction);
+		EnhancedComponent->BindAction(OrbitModifierAction, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandleOrbitModifierAction);
+	}
+	else
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: OrbitModifierAction not set."));
+	}
+
+	if (PanAction)
+	{
+		EnhancedComponent->BindAction(PanAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanAction);
+	}
+	else
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: PanAction not set."));
+	}
+
+	if (PanModifierAction)
+	{
+		EnhancedComponent->BindAction(PanModifierAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanModifierAction);
+		EnhancedComponent->BindAction(PanModifierAction, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandlePanModifierAction);
+	}
+	else
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: PanModifierAction not set."));
 	}
 }
 
@@ -150,7 +163,7 @@ void ASimulationCameraControl::HandlePanAction(const FInputActionInstance& Insta
 	// Pan if modifier is held (Middle Mouse) OR if input is strong (WASD keys usually give +/- 1.0)
 	// This allows WASD to work without holding a button, while gating mouse movement.
 	const bool bIsKeyInput = FMath::Abs(AxisValue.X) >= 0.5f || FMath::Abs(AxisValue.Y) >= 0.5f;
-	
+
 	if (bIsPanModifierDown || bIsKeyInput)
 	{
 		Pan(AxisValue);
