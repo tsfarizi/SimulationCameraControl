@@ -24,54 +24,57 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 		return;
 	}
 
-	// Bind input actions directly using TObjectPtr<UInputAction> variables
-	// This removes the need for FName-based iteration and hardcoded paths
-
-	if (ZoomAction)
+	if (!DefaultInputMapping)
 	{
-		EnhancedComponent->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleZoomAction);
-	}
-	else
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: ZoomAction not set."));
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: DefaultInputMapping is not set."));
+		return;
 	}
 
-	if (OrbitAction)
+	// Auto-bind all Input Actions from DefaultInputMapping by name convention
+	if (bAutoBindInputActions)
 	{
-		EnhancedComponent->BindAction(OrbitAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitAction);
-	}
-	else
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: OrbitAction not set."));
-	}
+		for (const FEnhancedActionKeyMapping& Mapping : DefaultInputMapping->GetMappings())
+		{
+			if (!Mapping.Action)
+			{
+				continue;
+			}
 
-	if (OrbitModifierAction)
-	{
-		EnhancedComponent->BindAction(OrbitModifierAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-		EnhancedComponent->BindAction(OrbitModifierAction, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-	}
-	else
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: OrbitModifierAction not set."));
-	}
+			const FName ActionName = Mapping.Action->GetFName();
 
-	if (PanAction)
-	{
-		EnhancedComponent->BindAction(PanAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanAction);
-	}
-	else
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: PanAction not set."));
-	}
-
-	if (PanModifierAction)
-	{
-		EnhancedComponent->BindAction(PanModifierAction, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanModifierAction);
-		EnhancedComponent->BindAction(PanModifierAction, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandlePanModifierAction);
-	}
-	else
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: PanModifierAction not set."));
+			// Zoom: IA_Zoom (1D Axis - float)
+			if (ActionName == FName("IA_Zoom"))
+			{
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleZoomAction);
+				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Zoom"), *ActionName.ToString());
+			}
+			// Orbit: IA_Orbit (2D Axis - FVector2D)
+			else if (ActionName == FName("IA_Orbit"))
+			{
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitAction);
+				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Orbit"), *ActionName.ToString());
+			}
+			// Orbit Modifier: IA_Orbit_Modifier (Bool)
+			else if (ActionName == FName("IA_Orbit_Modifier"))
+			{
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitModifierAction);
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandleOrbitModifierAction);
+				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> OrbitModifier"), *ActionName.ToString());
+			}
+			// Pan: IA_Pan (2D Axis - FVector2D)
+			else if (ActionName == FName("IA_Pan"))
+			{
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanAction);
+				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Pan"), *ActionName.ToString());
+			}
+			// Pan Modifier: IA_Pan_Modifier (Bool)
+			else if (ActionName == FName("IA_Pan_Modifier"))
+			{
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanModifierAction);
+				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandlePanModifierAction);
+				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> PanModifier"), *ActionName.ToString());
+			}
+		}
 	}
 }
 

@@ -135,33 +135,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Debug")
 	bool bDebug = false;
 
-	/** Mapping context applied via code. Fallback path allows loading IMC_CameraPawn without touching project settings. */
+	/** Mapping context applied via code. All Input Actions inside will be auto-bound by name convention. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputMappingContext> DefaultInputMapping;
-
-	/** Input action for Zoom (float axis). Assign in Blueprint or via DefaultInputMapping. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> ZoomAction;
-
-	/** Input action for Orbit (2D axis). Assign in Blueprint or via DefaultInputMapping. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> OrbitAction;
-
-	/** Input action for Orbit Modifier (bool). Assign in Blueprint or via DefaultInputMapping. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> OrbitModifierAction;
-
-	/** Input action for Pan (2D axis). Assign in Blueprint or via DefaultInputMapping. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> PanAction;
-
-	/** Input action for Pan Modifier (bool). Assign in Blueprint or via DefaultInputMapping. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> PanModifierAction;
 
 	/** Priority applied when registering the mapping context; higher values win conflicts. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
 	int32 InputMappingPriority = 0;
+
+	/** If true, automatically bind Input Actions from DefaultInputMapping by name convention. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input")
+	bool bAutoBindInputActions = true;
 
 	/** Interpolation speed for zoom smoothing (arm length). Higher = faster response. Safe range: 5.0-30.0. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
