@@ -17,7 +17,6 @@ public class SimulationCameraControl : ModuleRules
 		
 		PrivateIncludePaths.AddRange(
 			new string[] {
-				"$(ModuleDirectory)/Private",
 				// ... add other private include paths required here ...
 			}
 			);
