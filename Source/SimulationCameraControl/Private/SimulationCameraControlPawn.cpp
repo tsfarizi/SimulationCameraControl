@@ -1,5 +1,7 @@
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
+#include "CameraInputBehavior.h"
+#include "CameraMovementBehavior.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -34,6 +36,13 @@ ASimulationCameraControl::ASimulationCameraControl()
 	// Initialize target values for smoothing
 	TargetArmLength = SpringArm->TargetArmLength;
 	TargetRelativeRotation = SpringArm->GetRelativeRotation();
+
+	// Default input behavior: provides the 5 standard camera-movement actions
+	// (Zoom, Orbit, Orbit_Modifier, Pan, Pan_Modifier) so the pawn works out of
+	// the box. Designers can remove or augment this in the Details panel; add
+	// additional behaviors (boost, focus, free-look, etc.) the same way.
+	UCameraMovementBehavior* DefaultMovement = CreateDefaultSubobject<UCameraMovementBehavior>(TEXT("DefaultCameraMovement"));
+	Behaviors.Add(DefaultMovement);
 }
 
 void ASimulationCameraControl::BeginPlay()
@@ -148,4 +157,19 @@ void ASimulationCameraControl::SetInputMappingPriority(int32 InPriority)
 {
 	InputMappingPriority = FMath::Max(0, InPriority);
 	InitializeInputMapping();
+}
+
+void ASimulationCameraControl::SetInputBindingsOverride(UCameraInputBindings* InBindings)
+{
+	if (InputBindingsOverride == InBindings)
+	{
+		return;
+	}
+
+	InputBindingsOverride = InBindings;
+
+	// Force a rebuild on next setup. The existing ActiveInputMapping is left
+	// in place until the next PossessedBy/PawnClientRestart cycle so the
+	// current session's input bindings aren't yanked mid-frame.
+	ActiveInputMapping = nullptr;
 }

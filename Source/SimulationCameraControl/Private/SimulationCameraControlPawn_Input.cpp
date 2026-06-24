@@ -1,9 +1,14 @@
+// Copyright Teuku. All Rights Reserved.
+
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
 #include "CameraInputBindings.h"
 #include "CameraInputDefaults.h"
+#include "CameraInputBehavior.h"
+#include "CameraMovementBehavior.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
@@ -39,78 +44,154 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 		return;
 	}
 
-	// Auto-bind all Input Actions from the active mapping context by name convention
-	if (bAutoBindInputActions)
+	AutoBindBehaviorsToContext(EnhancedComponent);
+}
+
+void ASimulationCameraControl::AutoBindBehaviorsToContext(UEnhancedInputComponent* EnhancedComponent)
+{
+	if (!EnhancedComponent || !ActiveInputMapping || Behaviors.Num() == 0)
 	{
-		for (const FEnhancedActionKeyMapping& Mapping : ActiveInputMapping->GetMappings())
+		return;
+	}
+
+	// Build a TMap<UInputAction*, TWeakObjectPtr<UCameraInputBehavior>> for O(1) dispatch.
+	// We iterate the IMC's mappings (the source of truth for what was actually
+	// registered) and look up which behavior claimed each action name.
+	TMap<const UInputAction*, TWeakObjectPtr<UCameraInputBehavior>> ActionToBehavior;
+	ActionToBehavior.Reserve(ActiveInputMapping->GetMappings().Num());
+
+	for (const FEnhancedActionKeyMapping& Mapping : ActiveInputMapping->GetMappings())
+	{
+		if (!Mapping.Action)
 		{
-			if (!Mapping.Action)
-			{
-				continue;
-			}
+			continue;
+		}
+		const UInputAction* ActionPtr = Mapping.Action.Get();
+		const FName ActionName = Mapping.Action->GetFName();
 
-			const FName ActionName = Mapping.Action->GetFName();
+		// First behavior that claims this action wins. The pawn's Behaviors order
+		// is designer-controlled via the Details panel — drag the higher-priority
+		// behavior first to override defaults from later behaviors.
+		TWeakObjectPtr<UCameraInputBehavior>* Existing = ActionToBehavior.Find(ActionPtr);
+		if (Existing && Existing->IsValid())
+		{
+			continue;
+		}
 
-			// Zoom: IA_Zoom (1D Axis - float)
-			if (ActionName == FName("IA_Zoom"))
+		for (UCameraInputBehavior* Behavior : Behaviors)
+		{
+			if (Behavior && Behavior->HandlesAction(ActionName))
 			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleZoomAction);
-				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Zoom"), *ActionName.ToString());
+				ActionToBehavior.Add(ActionPtr, Behavior);
+				break;
 			}
-			// Orbit: IA_Orbit (2D Axis - FVector2D)
-			else if (ActionName == FName("IA_Orbit"))
+		}
+	}
+
+	// Bind each (action, behavior) pair. The lambda captures a TWeakObjectPtr so a
+	// behavior that gets GC'd between action registration and the event fire
+	// becomes a no-op rather than a crash.
+	for (const TPair<const UInputAction*, TWeakObjectPtr<UCameraInputBehavior>>& Pair : ActionToBehavior)
+	{
+		const UInputAction* Action = Pair.Key;
+		TWeakObjectPtr<UCameraInputBehavior> WeakBehavior = Pair.Value;
+
+		if (!Action)
+		{
+			continue;
+		}
+
+		const FName ActionName = Action->GetFName();
+
+		// All actions get the Triggered event.
+		EnhancedComponent->BindActionValueLambda(Action, ETriggerEvent::Triggered,
+			[WeakBehavior, ActionName, this](const FInputActionValue& Value)
 			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitAction);
-				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Orbit"), *ActionName.ToString());
-			}
-			// Orbit Modifier: IA_Orbit_Modifier (Bool)
-			else if (ActionName == FName("IA_Orbit_Modifier"))
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandleOrbitModifierAction);
-				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> OrbitModifier"), *ActionName.ToString());
-			}
-			// Pan: IA_Pan (2D Axis - FVector2D)
-			else if (ActionName == FName("IA_Pan"))
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanAction);
-				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> Pan"), *ActionName.ToString());
-			}
-			// Pan Modifier: IA_Pan_Modifier (Bool)
-			else if (ActionName == FName("IA_Pan_Modifier"))
-			{
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Triggered, this, &ASimulationCameraControl::HandlePanModifierAction);
-				EnhancedComponent->BindAction(Mapping.Action, ETriggerEvent::Completed, this, &ASimulationCameraControl::HandlePanModifierAction);
-				UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> PanModifier"), *ActionName.ToString());
-			}
+				if (UCameraInputBehavior* Behavior = WeakBehavior.Get())
+				{
+					Behavior->HandleAction(ActionName, Value, this);
+				}
+			});
+
+		// Boolean actions (modifier keys) also need the Completed event so the
+		// "released" state is captured.
+		if (Action->ValueType == EInputActionValueType::Boolean)
+		{
+			EnhancedComponent->BindActionValueLambda(Action, ETriggerEvent::Completed,
+				[WeakBehavior, ActionName, this](const FInputActionValue& Value)
+				{
+					if (UCameraInputBehavior* Behavior = WeakBehavior.Get())
+					{
+						Behavior->HandleAction(ActionName, Value, this);
+					}
+				});
+		}
+
+		UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Auto-bound: %s -> %s"),
+			*Action->GetName(),
+			*GetNameSafe(WeakBehavior.Get()));
+	}
+
+	// Warn about registered actions with no behavior claim — likely a typo or a
+	// forgotten Behaviors array entry. This makes typos loud at startup.
+	for (const FEnhancedActionKeyMapping& Mapping : ActiveInputMapping->GetMappings())
+	{
+		if (Mapping.Action && !ActionToBehavior.Contains(Mapping.Action.Get()))
+		{
+			UE_LOG(LogSimulationCameraControl, Warning, TEXT("Action '%s' is registered in the active mapping context but no behavior in Behaviors[] claims it. Add a behavior with GetActionSpecs() declaring this action, or remove the entry from InputBindingsOverride."),
+				*Mapping.Action->GetName());
 		}
 	}
 }
 
 void ASimulationCameraControl::InitializeInputMapping()
 {
-	// Build the active input context from the override DataAsset, or fall back
-	// to the C++ defaults. Result is parented to `this` so the GC keeps it alive
-	// alongside the pawn (avoids the context being collected mid-frame).
+	// Build the active input context. Order of preference:
+	//   1. InputBindingsOverride (DataAsset) - designer-edited spec list
+	//   2. Behaviors' GetActionSpecs() (concatenated in array order)
+	//   3. C++ defaults (CameraInputDefaults::GetDefaultActionSpecs)
+	// Result is parented to `this` so the GC keeps it alive alongside the pawn.
+
 	if (ActiveInputMapping)
 	{
-		// Already initialised; nothing to do.
 		return;
 	}
 
+	TArray<FCameraInputActionSpec> AllSpecs;
+
 	if (InputBindingsOverride)
 	{
-		ActiveInputMapping = InputBindingsOverride->BuildContext(this);
-		if (!ActiveInputMapping)
+		AllSpecs = InputBindingsOverride->Actions;
+	}
+	else
+	{
+		for (UCameraInputBehavior* Behavior : Behaviors)
 		{
-			UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: InputBindingsOverride '%s' produced null context. Falling back to C++ defaults."),
-				*GetNameSafe(InputBindingsOverride));
+			if (Behavior)
+			{
+				AllSpecs.Append(Behavior->GetActionSpecs());
+			}
 		}
 	}
 
-	if (!ActiveInputMapping)
+	if (AllSpecs.Num() == 0)
 	{
-		ActiveInputMapping = CameraInputDefaults::MakeDefaultContext(this);
+		// Final fallback: hardcoded defaults so the pawn still has SOME actions
+		// registered even if the designer cleared the Behaviors array and didn't
+		// assign an override DataAsset. (Behaviors are not used because there
+		// would be no handler — the warnings above in AutoBindBehaviorsToContext
+		// will surface the missing-claim issue.)
+		AllSpecs = CameraInputDefaults::GetDefaultActionSpecs();
+	}
+
+	// Wrap the spec list in a transient UCameraInputBindings so we can reuse
+	// BuildContext. Outer is the pawn so GC keeps both alive together.
+	UCameraInputBindings* TempBindings = NewObject<UCameraInputBindings>(
+		this, UCameraInputBindings::StaticClass(), TEXT("TransientCameraInputBindings"), RF_Transient);
+	if (TempBindings)
+	{
+		TempBindings->Actions = MoveTemp(AllSpecs);
+		ActiveInputMapping = TempBindings->BuildContext(this);
 	}
 
 	if (!ActiveInputMapping)
@@ -150,81 +231,26 @@ void ASimulationCameraControl::InitializeInputMapping()
 		*GetNameSafe(ActiveInputMapping), InputMappingPriority, *GetName());
 }
 
-void ASimulationCameraControl::HandleZoomAction(const FInputActionInstance& Instance)
+void ASimulationCameraControl::AddInputBehavior(UCameraInputBehavior* Behavior)
 {
-	const EInputActionValueType ValueType = Instance.GetValue().GetValueType();
-	if (ValueType != EInputActionValueType::Axis1D)
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("HandleZoomAction: Expected Axis1D but received %d."),
-			static_cast<int32>(ValueType));
-		return;
-	}
-
-	Zoom(Instance.GetValue().Get<float>());
-}
-
-void ASimulationCameraControl::HandleOrbitAction(const FInputActionInstance& Instance)
-{
-	// Only orbit if the modifier key (Right Mouse) is held down
-	if (!bIsOrbitModifierDown)
+	if (!Behavior)
 	{
 		return;
 	}
-
-	const EInputActionValueType ValueType = Instance.GetValue().GetValueType();
-	if (ValueType != EInputActionValueType::Axis2D)
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("HandleOrbitAction: Expected Axis2D but received %d."),
-			static_cast<int32>(ValueType));
-		return;
-	}
-
-	Orbit(Instance.GetValue().Get<FVector2D>());
-}
-
-void ASimulationCameraControl::HandlePanAction(const FInputActionInstance& Instance)
-{
-	const EInputActionValueType ValueType = Instance.GetValue().GetValueType();
-	if (ValueType != EInputActionValueType::Axis2D)
-	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("HandlePanAction: Expected Axis2D but received %d."),
-			static_cast<int32>(ValueType));
-		return;
-	}
-
-	const FVector2D AxisValue = Instance.GetValue().Get<FVector2D>();
-
-	// Pan if modifier is held (Middle Mouse) OR if input is strong (WASD keys usually give +/- 1.0)
-	// This allows WASD to work without holding a button, while gating mouse movement.
-	const bool bIsKeyInput = FMath::Abs(AxisValue.X) >= 0.5f || FMath::Abs(AxisValue.Y) >= 0.5f;
-
-	if (bIsPanModifierDown || bIsKeyInput)
-	{
-		Pan(AxisValue);
-	}
-}
-
-void ASimulationCameraControl::HandleOrbitModifierAction(const FInputActionInstance& Instance)
-{
-	bIsOrbitModifierDown = Instance.GetValue().Get<bool>();
-}
-
-void ASimulationCameraControl::HandlePanModifierAction(const FInputActionInstance& Instance)
-{
-	bIsPanModifierDown = Instance.GetValue().Get<bool>();
-}
-
-void ASimulationCameraControl::SetInputBindingsOverride(UCameraInputBindings* InBindings)
-{
-	if (InputBindingsOverride == InBindings)
+	if (Behaviors.Contains(Behavior))
 	{
 		return;
 	}
-
-	InputBindingsOverride = InBindings;
-
-	// Force a rebuild on next setup. The existing ActiveInputMapping is left
-	// in place until the next PossessedBy/PawnClientRestart cycle so the
-	// current session's input bindings aren't yanked mid-frame.
+	Behaviors.Add(Behavior);
+	// Force a rebuild on next setup. ActiveInputMapping is left in place so
+	// the current session's bindings stay valid until the next restart.
 	ActiveInputMapping = nullptr;
+}
+
+void ASimulationCameraControl::RemoveInputBehavior(UCameraInputBehavior* Behavior)
+{
+	if (Behaviors.RemoveSingle(Behavior) > 0)
+	{
+		ActiveInputMapping = nullptr;
+	}
 }

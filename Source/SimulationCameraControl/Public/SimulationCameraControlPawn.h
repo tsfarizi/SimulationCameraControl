@@ -11,6 +11,7 @@ class USceneComponent;
 class UInputAction;
 class UInputMappingContext;
 class UCameraInputBindings;
+class UCameraInputBehavior;
 struct FInputActionInstance;
 
 /**
@@ -66,6 +67,31 @@ public:
 	void SetInputBindingsOverride(UCameraInputBindings* InBindings);
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
 	void SetInputMappingPriority(int32 InPriority);
+
+	// Modifier state accessors for input behaviors.
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool IsOrbitModifierDown() const { return bIsOrbitModifierDown; }
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void SetOrbitModifierDown(bool bDown) { bIsOrbitModifierDown = bDown; }
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool IsPanModifierDown() const { return bIsPanModifierDown; }
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void SetPanModifierDown(bool bDown) { bIsPanModifierDown = bDown; }
+
+	/**
+	 * Add a new input behavior at runtime. Useful for feature plugins that
+	 * want to extend the camera's input surface without modifying the pawn's
+	 * Behaviors array directly.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void AddInputBehavior(UCameraInputBehavior* Behavior);
+
+	/**
+	 * Remove a previously-added input behavior. Safe to call with a stale
+	 * pointer (the lookup is by raw pointer identity, not by TObjectPtr).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void RemoveInputBehavior(UCameraInputBehavior* Behavior);
 
 protected:
 	/** Root component - keeps explicit hierarchy Root -> SpringArm -> Camera. */
@@ -140,7 +166,8 @@ protected:
 	 * Optional input bindings override. When set, the pawn builds the
 	 * UInputMappingContext from this DataAsset's spec list (FCameraInputActionSpec
 	 * entries: action name, value type, default key bindings). When null, the
-	 * pawn falls back to the C++ defaults in CameraInputDefaults.
+	 * pawn falls back to collecting specs from the Behaviors array, and finally
+	 * to the C++ defaults in CameraInputDefaults.
 	 *
 	 * The override pattern lets designers customise key bindings without
 	 * recompiling C++; the in-code defaults keep the pawn usable out of the box.
@@ -148,13 +175,25 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraInputBindings> InputBindingsOverride;
 
+	/**
+	 * Modular input behaviors. Each behavior declares zero or more action
+	 * specs (UCameraInputBehavior::GetActionSpecs) and implements the
+	 * dispatch (HandleAction). The pawn auto-binds every action declared
+	 * by any behavior in this array to the first behavior that claims it
+	 * (UCameraInputBehavior::HandlesAction). Stacking multiple behaviors
+	 * lets you add features (boost, focus, free-look) without touching
+	 * the pawn's C++.
+	 *
+	 * The default UCameraMovementBehavior is added in the constructor so
+	 * the camera works out of the box. Edit / remove it as needed; add
+	 * new behaviors via the Details panel "+" button.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Instanced, Category = "Camera|Input")
+	TArray<TObjectPtr<UCameraInputBehavior>> Behaviors;
+
 	/** Priority applied when registering the mapping context; higher values win conflicts. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
 	int32 InputMappingPriority = 0;
-
-	/** If true, automatically bind Input Actions from the active mapping context by name convention. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input")
-	bool bAutoBindInputActions = true;
 
 	/**
 	 * Active input context built in-memory from InputBindingsOverride (or the C++
@@ -198,23 +237,24 @@ private:
 	/** Applies zoom by clamping arm length and repositioning pawn along focus direction. */
 	void ApplyZoom(float DesiredArmLength, const FVector& FocusPoint);
 
-	/** Registers the active input context (built from InputBindingsOverride or C++ defaults) with the local player's Enhanced Input subsystem. */
+	/** Registers the active input context (built from InputBindingsOverride, the Behaviors, or C++ defaults) with the local player's Enhanced Input subsystem. */
 	void InitializeInputMapping();
 
-	/** Wrapper pulling float axis from Enhanced Input action and forwarding to Zoom. */
-	void HandleZoomAction(const FInputActionInstance& Instance);
+	/**
+	 * Auto-binds every action in the active input context to the first behavior
+	 * in Behaviors that claims it. Called from SetupPlayerInputComponent.
+	 * For boolean (modifier) actions, both Triggered and Completed events are
+	 * bound so the pressed/released state is captured.
+	 */
+	void AutoBindBehaviorsToContext(class UEnhancedInputComponent* EnhancedComponent);
 
-	/** Wrapper pulling 2D axis from Enhanced Input action and forwarding to Orbit. */
-	void HandleOrbitAction(const FInputActionInstance& Instance);
+	/** Tracks whether the Orbit Modifier (Right Mouse) is held down. Read/write by input behaviors. */
+	UPROPERTY(Transient)
+	bool bIsOrbitModifierDown = false;
 
-	/** Wrapper tracking Orbit Modifier state. */
-	void HandleOrbitModifierAction(const FInputActionInstance& Instance);
-
-	/** Wrapper pulling 2D axis from Enhanced Input action and forwarding to Pan. */
-	void HandlePanAction(const FInputActionInstance& Instance);
-
-	/** Wrapper tracking Pan Modifier state. */
-	void HandlePanModifierAction(const FInputActionInstance& Instance);
+	/** Tracks whether the Pan Modifier (Middle Mouse) is held down. Read/write by input behaviors. */
+	UPROPERTY(Transient)
+	bool bIsPanModifierDown = false;
 
 	/** Cached focus location to smooth zoom operations. */
 	FVector LastValidHitLocation = FVector::ZeroVector;
@@ -222,11 +262,10 @@ private:
 	/** Tracks whether LastValidHitLocation is initialized. */
 	bool bHasCachedFocus = false;
 
-	/** Tracks whether the Orbit Modifier (Right Mouse) is held down. */
-	bool bIsOrbitModifierDown = false;
+	/** Tracks whether the Orbit Modifier (Right Mouse) is held down. (Read/write by input behaviors; declared as UPROPERTY above for accessor support.) */
 
-	/** Tracks whether the Pan Modifier (Middle Mouse) is held down. */
-	bool bIsPanModifierDown = false;
+	/** Tracks whether the Pan Modifier (Middle Mouse) is held down. (Read/write by input behaviors; declared as UPROPERTY above for accessor support.) */
+
 
 	// Smoothing state variables
 	/** Target arm length for smooth zoom interpolation. */
