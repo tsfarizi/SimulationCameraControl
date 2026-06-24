@@ -5,40 +5,42 @@
 #include "CoreMinimal.h"
 #include "CameraInputBehavior.h"
 #include "CameraInputBindings.h"
-#include "CameraLeftDragPanBehavior.generated.h"
+#include "CameraDragPanBehavior.generated.h"
 
 /**
- * UCameraLeftDragPanBehavior
+ * UCameraDragPanBehavior
  * Adds a "click-and-drag to pan" input mode, the standard sim-game camera
  * control (Cities Skylines, Planet Zoo, the Unreal editor itself).
  *
- * - IA_LeftDrag_Modifier (Bool) is held by the left mouse button.
- * - IA_LeftDrag_Pan (Axis2D) reads mouse movement (Mouse2D) while the
+ * - IA_Drag_Modifier (Bool) is the gate key. Default binding is LeftMouseButton
+ *   but the designer can rebind it via the InputBindingsOverride DataAsset or
+ *   a per-behavior DataAsset slot.
+ * - IA_Drag_Pan (Axis2D) reads pointer movement (default Mouse2D) while the
  *   modifier is held.
  * - HandleAction forwards the pan vector to the pawn's Pan() method with
- *   InvertAxis applied, so dragging right moves the camera left (the
- *   "grab the world and pull" feel).
+ *   InvertAxis applied, so the default "drag right moves camera left"
+ *   (the "grab the world and pull" feel) is the default.
  *
- * This behavior is independent of UCameraMovementBehavior (which handles
- * the middle-mouse / WASD pan). The two can be stacked in the pawn's
- * Behaviors array: middle-mouse-drag pans normally, left-mouse-drag pans
- * with the inverted direction. Only one is active at a time because each
- * has its own modifier (left vs middle mouse).
+ * The class name and action names are intentionally NOT prefixed with "Left"
+ * so the same behavior can be re-bound to any modifier key (right mouse,
+ * middle mouse, gamepad shoulder, etc.) without renaming. The default
+ * binding is left mouse for the common sim-game convention.
+ *
+ * Independent of UCameraMovementBehavior (which handles the middle-mouse /
+ * WASD pan). The two can be stacked: middle-mouse-drag pans normally,
+ * modifier-drag pans with the inverted direction. Only one is active at a
+ * time because each has its own modifier key.
  *
  * Designer can tune:
  *   - PanSpeedMultiplier : extra scale on top of the pawn's PanSpeed.
  *     Default 1.0; raise for a faster pan, lower for a slower, more
  *     precise pan.
  *   - InvertAxis : per-axis sign flip. Default (-1, -1) gives the
- *     "inverse direction" feel requested; flip to (1, 1) for direct
+ *     "inverse direction" feel; flip to (1, 1) for direct
  *     "camera follows the cursor" feel.
- *   - bRequireExactModifierState : when true, only Triggered events
- *     (button freshly pressed) start the pan; when false, both Triggered
- *     and any value > 0 sustain it (more forgiving, matches the
- *     UCameraMovementBehavior modifier handling style).
  */
-UCLASS(Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DisplayName = "Camera Left Drag Pan")
-class SIMULATIONCAMERACONTROL_API UCameraLeftDragPanBehavior : public UCameraInputBehavior
+UCLASS(Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DisplayName = "Camera Drag Pan")
+class SIMULATIONCAMERACONTROL_API UCameraDragPanBehavior : public UCameraInputBehavior
 {
 	GENERATED_BODY()
 
@@ -48,7 +50,7 @@ public:
 	float PanSpeedMultiplier = 1.0f;
 
 	/**
-	 * Per-axis sign flip applied to the Mouse2D vector before calling Pawn->Pan().
+	 * Per-axis sign flip applied to the input vector before calling Pawn->Pan().
 	 * Default (-1, -1): dragging right moves camera left, dragging down moves
 	 * camera up — the "inverse direction" feel typical of sim games. Set to
 	 * (1, 1) for the direct "camera follows the cursor" feel used by some
@@ -63,7 +65,7 @@ public:
 	//~ End UCameraInputBehavior
 
 private:
-	/** Local modifier state. Read/written by HandleAction on IA_LeftDrag_Modifier events. */
+	/** Local modifier state. Read/written by HandleAction on IA_Drag_Modifier events. */
 	UPROPERTY(Transient)
-	bool bIsLeftDragActive = false;
+	bool bIsDragActive = false;
 };

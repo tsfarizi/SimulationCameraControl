@@ -1,19 +1,21 @@
 // Copyright Teuku. All Rights Reserved.
 
-#include "CameraLeftDragPanBehavior.h"
+#include "CameraDragPanBehavior.h"
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
 
-TArray<FCameraInputActionSpec> UCameraLeftDragPanBehavior::GetActionSpecs_Implementation() const
+TArray<FCameraInputActionSpec> UCameraDragPanBehavior::GetActionSpecs_Implementation() const
 {
 	TArray<FCameraInputActionSpec> Specs;
 
-	// IA_LeftDrag_Modifier: left mouse button (Bool). Both Triggered (press)
+	// IA_Drag_Modifier: default left mouse button (Bool). Both Triggered (press)
 	// and Completed (release) are bound in the pawn's auto-bind loop, so the
-	// boolean state stays accurate across hold/release cycles.
+	// boolean state stays accurate across hold/release cycles. Designer can
+	// rebind this to any key via InputBindingsOverride (right-mouse drag,
+	// gamepad shoulder, etc.) without touching C++.
 	{
 		FCameraInputActionSpec Spec;
-		Spec.ActionName = FName(TEXT("IA_LeftDrag_Modifier"));
+		Spec.ActionName = FName(TEXT("IA_Drag_Modifier"));
 		Spec.ValueType = EInputActionValueType::Boolean;
 		FCameraInputKeySpec Key;
 		Key.Key = EKeys::LeftMouseButton;
@@ -23,12 +25,12 @@ TArray<FCameraInputActionSpec> UCameraLeftDragPanBehavior::GetActionSpecs_Implem
 		Specs.Add(Spec);
 	}
 
-	// IA_LeftDrag_Pan: Mouse2D (Axis2D) reports per-frame mouse-delta in screen
-	// space (+X = right, +Y = down in screen coords). InvertAxis handles the
-	// "inverse direction" feel at the behavior layer.
+	// IA_Drag_Pan: default Mouse2D (Axis2D) reports per-frame pointer-delta in
+	// screen space (+X = right, +Y = down in screen coords). InvertAxis handles
+	// the "inverse direction" feel at the behavior layer.
 	{
 		FCameraInputActionSpec Spec;
-		Spec.ActionName = FName(TEXT("IA_LeftDrag_Pan"));
+		Spec.ActionName = FName(TEXT("IA_Drag_Pan"));
 		Spec.ValueType = EInputActionValueType::Axis2D;
 		FCameraInputKeySpec Key;
 		Key.Key = EKeys::Mouse2D;
@@ -41,7 +43,7 @@ TArray<FCameraInputActionSpec> UCameraLeftDragPanBehavior::GetActionSpecs_Implem
 	return Specs;
 }
 
-void UCameraLeftDragPanBehavior::HandleAction_Implementation(FName ActionName, const FInputActionValue& Value, UObject* Owner)
+void UCameraDragPanBehavior::HandleAction_Implementation(FName ActionName, const FInputActionValue& Value, UObject* Owner)
 {
 	ASimulationCameraControl* Pawn = Cast<ASimulationCameraControl>(Owner);
 	if (!Pawn)
@@ -49,20 +51,20 @@ void UCameraLeftDragPanBehavior::HandleAction_Implementation(FName ActionName, c
 		return;
 	}
 
-	if (ActionName == FName(TEXT("IA_LeftDrag_Modifier")))
+	if (ActionName == FName(TEXT("IA_Drag_Modifier")))
 	{
 		// Triggered (pressed) -> true, Completed (released) -> false.
-		bIsLeftDragActive = Value.Get<bool>();
+		bIsDragActive = Value.Get<bool>();
 		return;
 	}
 
-	if (ActionName == FName(TEXT("IA_LeftDrag_Pan")))
+	if (ActionName == FName(TEXT("IA_Drag_Pan")))
 	{
-		// Ignore mouse movement when the modifier isn't held. The Triggered
-		// event still fires every frame the mouse moves, but the gate
+		// Ignore pointer movement when the modifier isn't held. The Triggered
+		// event still fires every frame the pointer moves, but the gate
 		// makes sure we don't pan when the user is just moving the cursor
-		// around the UI without holding the left button.
-		if (!bIsLeftDragActive)
+		// around the UI without holding the modifier key.
+		if (!bIsDragActive)
 		{
 			return;
 		}
@@ -70,7 +72,7 @@ void UCameraLeftDragPanBehavior::HandleAction_Implementation(FName ActionName, c
 		const EInputActionValueType ValueType = Value.GetValueType();
 		if (ValueType != EInputActionValueType::Axis2D)
 		{
-			UE_LOG(LogSimulationCameraControl, Warning, TEXT("UCameraLeftDragPanBehavior: IA_LeftDrag_Pan expected Axis2D, got %d."),
+			UE_LOG(LogSimulationCameraControl, Warning, TEXT("UCameraDragPanBehavior: IA_Drag_Pan expected Axis2D, got %d."),
 				static_cast<int32>(ValueType));
 			return;
 		}
@@ -88,6 +90,6 @@ void UCameraLeftDragPanBehavior::HandleAction_Implementation(FName ActionName, c
 	}
 	else
 	{
-		UE_LOG(LogSimulationCameraControl, Verbose, TEXT("UCameraLeftDragPanBehavior: unhandled action '%s'."), *ActionName.ToString());
+		UE_LOG(LogSimulationCameraControl, Verbose, TEXT("UCameraDragPanBehavior: unhandled action '%s'."), *ActionName.ToString());
 	}
 }
