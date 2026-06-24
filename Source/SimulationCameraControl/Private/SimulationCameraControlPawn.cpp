@@ -144,12 +144,6 @@ void ASimulationCameraControl::SetInputEnabled(bool bInEnabled)
 		bInputEnabled ? TEXT("true") : TEXT("false"));
 }
 
-void ASimulationCameraControl::SetDefaultInputMapping(UInputMappingContext* InContext)
-{
-	DefaultInputMapping = InContext;
-	InitializeInputMapping();
-}
-
 void ASimulationCameraControl::SetInputMappingPriority(int32 InPriority)
 {
 	InputMappingPriority = FMath::Max(0, InPriority);

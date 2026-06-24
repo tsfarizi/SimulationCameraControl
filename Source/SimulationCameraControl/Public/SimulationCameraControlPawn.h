@@ -10,6 +10,7 @@ class USpringArmComponent;
 class USceneComponent;
 class UInputAction;
 class UInputMappingContext;
+class UCameraInputBindings;
 struct FInputActionInstance;
 
 /**
@@ -62,7 +63,7 @@ public:
 
 	// Setter BP-callable
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
-	void SetDefaultInputMapping(UInputMappingContext* InContext);
+	void SetInputBindingsOverride(UCameraInputBindings* InBindings);
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
 	void SetInputMappingPriority(int32 InPriority);
 
@@ -135,17 +136,33 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Debug")
 	bool bDebug = false;
 
-	/** Mapping context applied via code. All Input Actions inside will be auto-bound by name convention. */
+	/**
+	 * Optional input bindings override. When set, the pawn builds the
+	 * UInputMappingContext from this DataAsset's spec list (FCameraInputActionSpec
+	 * entries: action name, value type, default key bindings). When null, the
+	 * pawn falls back to the C++ defaults in CameraInputDefaults.
+	 *
+	 * The override pattern lets designers customise key bindings without
+	 * recompiling C++; the in-code defaults keep the pawn usable out of the box.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputMappingContext> DefaultInputMapping;
+	TObjectPtr<UCameraInputBindings> InputBindingsOverride;
 
 	/** Priority applied when registering the mapping context; higher values win conflicts. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
 	int32 InputMappingPriority = 0;
 
-	/** If true, automatically bind Input Actions from DefaultInputMapping by name convention. */
+	/** If true, automatically bind Input Actions from the active mapping context by name convention. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input")
 	bool bAutoBindInputActions = true;
+
+	/**
+	 * Active input context built in-memory from InputBindingsOverride (or the C++
+	 * defaults). Set on first InitializeInputMapping call; reused for the lifetime
+	 * of the pawn so the action list doesn't churn across BeginPlay / restart.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> ActiveInputMapping = nullptr;
 
 	/** Interpolation speed for zoom smoothing (arm length). Higher = faster response. Safe range: 5.0-30.0. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
@@ -181,7 +198,7 @@ private:
 	/** Applies zoom by clamping arm length and repositioning pawn along focus direction. */
 	void ApplyZoom(float DesiredArmLength, const FVector& FocusPoint);
 
-	/** Registers DefaultInputMapping with the local player's Enhanced Input subsystem. */
+	/** Registers the active input context (built from InputBindingsOverride or C++ defaults) with the local player's Enhanced Input subsystem. */
 	void InitializeInputMapping();
 
 	/** Wrapper pulling float axis from Enhanced Input action and forwarding to Zoom. */

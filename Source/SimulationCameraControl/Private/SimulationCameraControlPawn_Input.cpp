@@ -1,5 +1,7 @@
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
+#include "CameraInputBindings.h"
+#include "CameraInputDefaults.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
@@ -24,16 +26,23 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 		return;
 	}
 
-	if (!DefaultInputMapping)
+	// Build (or reuse) the active input context. InitializeInputMapping stores it in
+	// the pawn's outer so it survives until the pawn is destroyed.
+	if (!ActiveInputMapping)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: DefaultInputMapping is not set."));
+		InitializeInputMapping();
+	}
+
+	if (!ActiveInputMapping)
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("SetupPlayerInputComponent: no active mapping context (InitializeInputMapping failed)."));
 		return;
 	}
 
-	// Auto-bind all Input Actions from DefaultInputMapping by name convention
+	// Auto-bind all Input Actions from the active mapping context by name convention
 	if (bAutoBindInputActions)
 	{
-		for (const FEnhancedActionKeyMapping& Mapping : DefaultInputMapping->GetMappings())
+		for (const FEnhancedActionKeyMapping& Mapping : ActiveInputMapping->GetMappings())
 		{
 			if (!Mapping.Action)
 			{
@@ -80,43 +89,65 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 
 void ASimulationCameraControl::InitializeInputMapping()
 {
-	if (!DefaultInputMapping)
+	// Build the active input context from the override DataAsset, or fall back
+	// to the C++ defaults. Result is parented to `this` so the GC keeps it alive
+	// alongside the pawn (avoids the context being collected mid-frame).
+	if (ActiveInputMapping)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping skipped: DefaultInputMapping is null."));
+		// Already initialised; nothing to do.
+		return;
+	}
+
+	if (InputBindingsOverride)
+	{
+		ActiveInputMapping = InputBindingsOverride->BuildContext(this);
+		if (!ActiveInputMapping)
+		{
+			UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: InputBindingsOverride '%s' produced null context. Falling back to C++ defaults."),
+				*GetNameSafe(InputBindingsOverride));
+		}
+	}
+
+	if (!ActiveInputMapping)
+	{
+		ActiveInputMapping = CameraInputDefaults::MakeDefaultContext(this);
+	}
+
+	if (!ActiveInputMapping)
+	{
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: failed to build any input context."));
 		return;
 	}
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping failed: no controller."));
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: no controller (will register when possessed)."));
 		return;
 	}
 
 	ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
 	if (!LocalPlayer)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping failed: controller has no local player."));
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: controller has no local player."));
 		return;
 	}
 
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
 	if (!Subsystem)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping failed: EnhancedInput subsystem unavailable."));
+		UE_LOG(LogSimulationCameraControl, Warning, TEXT("InitializeInputMapping: EnhancedInput subsystem unavailable."));
 		return;
 	}
 
-	if (Subsystem->HasMappingContext(DefaultInputMapping))
+	if (Subsystem->HasMappingContext(ActiveInputMapping))
 	{
-		Subsystem->RemoveMappingContext(DefaultInputMapping);
-		UE_LOG(LogSimulationCameraControl, VeryVerbose, TEXT("InitializeInputMapping: Removed existing mapping %s before re-adding."),
-			*GetNameSafe(DefaultInputMapping));
+		Subsystem->RemoveMappingContext(ActiveInputMapping);
 	}
 
-	Subsystem->AddMappingContext(DefaultInputMapping, InputMappingPriority);
+	Subsystem->AddMappingContext(ActiveInputMapping, InputMappingPriority);
 	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("InitializeInputMapping: Added %s with priority %d for %s."),
-		*GetNameSafe(DefaultInputMapping), InputMappingPriority, *GetName());
+		*GetNameSafe(ActiveInputMapping), InputMappingPriority, *GetName());
 }
 
 void ASimulationCameraControl::HandleZoomAction(const FInputActionInstance& Instance)
@@ -181,4 +212,19 @@ void ASimulationCameraControl::HandleOrbitModifierAction(const FInputActionInsta
 void ASimulationCameraControl::HandlePanModifierAction(const FInputActionInstance& Instance)
 {
 	bIsPanModifierDown = Instance.GetValue().Get<bool>();
+}
+
+void ASimulationCameraControl::SetInputBindingsOverride(UCameraInputBindings* InBindings)
+{
+	if (InputBindingsOverride == InBindings)
+	{
+		return;
+	}
+
+	InputBindingsOverride = InBindings;
+
+	// Force a rebuild on next setup. The existing ActiveInputMapping is left
+	// in place until the next PossessedBy/PawnClientRestart cycle so the
+	// current session's input bindings aren't yanked mid-frame.
+	ActiveInputMapping = nullptr;
 }
