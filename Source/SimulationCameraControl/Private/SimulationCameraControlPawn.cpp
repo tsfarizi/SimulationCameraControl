@@ -1,6 +1,7 @@
 #include "SimulationCameraControlPawn.h"
 #include "SimulationCameraControlPawn_Internal.h"
 #include "CameraInputBehavior.h"
+#include "CameraInputMode.h"
 #include "CameraMovementBehavior.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
@@ -37,12 +38,19 @@ ASimulationCameraControl::ASimulationCameraControl()
 	TargetArmLength = SpringArm->TargetArmLength;
 	TargetRelativeRotation = SpringArm->GetRelativeRotation();
 
-	// Default input behavior: provides the 5 standard camera-movement actions
+	// Default input mode: provides the 5 standard camera-movement actions
 	// (Zoom, Orbit, Orbit_Modifier, Pan, Pan_Modifier) so the pawn works out of
-	// the box. Designers can remove or augment this in the Details panel; add
-	// additional behaviors (boost, focus, free-look, etc.) the same way.
+	// the box. Designers can edit / remove this mode in the Details panel; add
+	// additional modes (UI, Combat, Cinematic, etc.) as siblings in the
+	// RegisteredModes array. ActiveModes is initialised to {"Default"} so the
+	// pawn's first PossessedBy / BeginPlay has a working input set.
+	UCameraInputMode* DefaultMode = CreateDefaultSubobject<UCameraInputMode>(TEXT("DefaultInputMode"));
+	DefaultMode->ModeName = FName(TEXT("Default"));
+	DefaultMode->Priority = 0;
 	UCameraMovementBehavior* DefaultMovement = CreateDefaultSubobject<UCameraMovementBehavior>(TEXT("DefaultCameraMovement"));
-	Behaviors.Add(DefaultMovement);
+	DefaultMode->Behaviors.Add(DefaultMovement);
+	RegisteredModes.Add(DefaultMode);
+	ActiveModes.Add(FName(TEXT("Default")));
 }
 
 void ASimulationCameraControl::BeginPlay()
@@ -156,32 +164,22 @@ void ASimulationCameraControl::SetInputEnabled(bool bInEnabled)
 void ASimulationCameraControl::SetInputMappingPriority(int32 InPriority)
 {
 	InputMappingPriority = FMath::Max(0, InPriority);
-	InitializeInputMapping();
+	RefreshActiveInputMappings();
 }
 
 void ASimulationCameraControl::RebuildInputContext()
 {
-	// Drop the cached IMC so the next InitializeInputMapping call rebuilds.
-	// Note: this does NOT unregister the old IMC from the Enhanced Input
-	// subsystem - that happens lazily on the next PossessedBy or
-	// PawnClientRestart cycle, OR if the designer calls InitializeInputMapping
-	// directly (which will see the old ActiveInputMapping and skip - so
-	// they should also call SetInputEnabled(false) or trigger a re-possess
-	// if they need the unregister to happen immediately).
-	ActiveInputMapping = nullptr;
-}
-
-void ASimulationCameraControl::SetInputBindingsOverride(UCameraInputBindings* InBindings)
-{
-	if (InputBindingsOverride == InBindings)
+	// Drop all cached mode IMCs so the next build starts fresh. Note: this
+	// does NOT unregister from the Enhanced Input subsystem by itself. The
+	// caller should follow up with RefreshActiveInputMappings() to take
+	// effect immediately, or wait for the next PossessedBy/PawnClientRestart
+	// cycle (which calls InitializeInputMapping).
+	for (UCameraInputMode* Mode : RegisteredModes)
 	{
-		return;
+		if (Mode)
+		{
+			Mode->InvalidateBuiltContext();
+		}
 	}
-
-	InputBindingsOverride = InBindings;
-
-	// Force a rebuild on next setup. The existing ActiveInputMapping is left
-	// in place until the next PossessedBy/PawnClientRestart cycle so the
-	// current session's input bindings aren't yanked mid-frame.
-	ActiveInputMapping = nullptr;
+	ActiveMappingContexts.Reset();
 }

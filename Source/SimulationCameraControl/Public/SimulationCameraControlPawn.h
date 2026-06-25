@@ -12,6 +12,7 @@ class UInputAction;
 class UInputMappingContext;
 class UCameraInputBindings;
 class UCameraInputBehavior;
+class UCameraInputMode;
 struct FInputActionInstance;
 
 /** Fires when the pawn has built (or rebuilt) its in-memory UInputMappingContext,
@@ -78,8 +79,6 @@ public:
 
 	// Setter BP-callable
 	UFUNCTION(BlueprintCallable, Category="Camera|Input")
-	void SetInputBindingsOverride(UCameraInputBindings* InBindings);
-	UFUNCTION(BlueprintCallable, Category="Camera|Input")
 	void SetInputMappingPriority(int32 InPriority);
 
 	// Modifier state accessors for input behaviors.
@@ -93,35 +92,78 @@ public:
 	void SetPanModifierDown(bool bDown) { bIsPanModifierDown = bDown; }
 
 	/**
-	 * Add a new input behavior at runtime. Useful for feature plugins that
-	 * want to extend the camera's input surface without modifying the pawn's
-	 * Behaviors array directly.
+	 * Add a behavior to a registered mode (creating the mode first if ModeName
+	 * doesn't exist). Useful for feature plugins that want to extend the
+	 * camera's input surface at runtime without modifying the pawn's modes.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void AddInputBehavior(UCameraInputBehavior* Behavior);
+	void AddInputBehavior(UCameraInputBehavior* Behavior, FName ModeName = TEXT("Default"));
 
 	/**
-	 * Remove a previously-added input behavior. Safe to call with a stale
-	 * pointer (the lookup is by raw pointer identity, not by TObjectPtr).
+	 * Remove a previously-added behavior. Safe to call with a stale pointer.
+	 * If the behavior is currently inside a mode's Behaviors[] array, it's
+	 * removed from there and that mode's IMC is invalidated.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
 	void RemoveInputBehavior(UCameraInputBehavior* Behavior);
 
 	/**
-	 * Drop the current ActiveInputMapping so the next InitializeInputMapping call
-	 * rebuilds from scratch. Use after changing InputBindingsOverride, mutating
-	 * Behaviors, or after a settings reload. Does not unregister from the Enhanced
-	 * Input subsystem by itself - that happens on the next PossessedBy or
-	 * PawnClientRestart cycle (or call InitializeInputMapping directly).
+	 * Drop all cached IMCs and force a full rebuild on the next input tick.
+	 * Use after mutating mode data (InputBindingsOverride, Behaviors, etc.) or
+	 * after a settings reload. The actual rebuild happens on the next
+	 * PossessedBy / PawnClientRestart cycle, or immediately if you call
+	 * RefreshActiveInputMappings() right after.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
 	void RebuildInputContext();
 
 	/**
+	 * Force a full rebuild of the active IMCs and re-register them with the
+	 * Enhanced Input subsystem right now. Useful when you want the input
+	 * change to take effect immediately (e.g., after editing a key binding
+	 * via an in-game settings menu).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void RefreshActiveInputMappings();
+
+	/**
+	 * Enable a mode by name. The mode's IMC is built (if not cached) and
+	 * registered with the Enhanced Input subsystem at the mode's Priority.
+	 * No-op if the mode is already active. No-op if ModeName doesn't match
+	 * any registered mode.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool EnableMode(FName ModeName);
+
+	/**
+	 * Disable a mode by name. Its IMC is unregistered from the Enhanced Input
+	 * subsystem and removed from ActiveMappingContexts. No-op if the mode
+	 * wasn't active.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool DisableMode(FName ModeName);
+
+	/**
+	 * Disable all currently-active modes and enable only the named one. Use
+	 * for "switch to this single mode" transitions (e.g., entering a
+	 * cinematic that needs to lock all gameplay input).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool SetExclusiveMode(FName ModeName);
+
+	/** Returns true if ModeName is in the ActiveModes set. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool IsModeActive(FName ModeName) const { return ActiveModes.Contains(ModeName); }
+
+	/** Toggles the mode: enables if disabled, disables if enabled. */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	bool ToggleMode(FName ModeName);
+
+	/**
 	 * Fired after the in-memory UInputMappingContext has been built but before
 	 * it is registered with the Enhanced Input subsystem. Subscribers can mutate
 	 * the context (add triggers, swap modifiers, change key bindings) before
-	 * the player's input pipeline sees it.
+	 * the player's input pipeline sees it. Fires once per active mode.
 	 */
 	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
 	FOnInputContextBuilt OnInputContextBuilt;
@@ -129,7 +171,8 @@ public:
 	/**
 	 * Fired after the IMC has been registered with the Enhanced Input subsystem.
 	 * At this point the player's input pipeline is hot and the pawn will start
-	 * receiving Triggered/Completed events on its behaviors.
+	 * receiving Triggered/Completed events on its behaviors. Fires once per
+	 * active mode.
 	 */
 	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
 	FOnInputContextRegistered OnInputContextRegistered;
@@ -204,45 +247,30 @@ protected:
 	bool bDebug = false;
 
 	/**
-	 * Optional input bindings override. When set, the pawn builds the
-	 * UInputMappingContext from this DataAsset's spec list (FCameraInputActionSpec
-	 * entries: action name, value type, default key bindings). When null, the
-	 * pawn falls back to collecting specs from the Behaviors array, and finally
-	 * to the C++ defaults in CameraInputDefaults.
+	 * Registered input modes. Each mode bundles behaviors + bindings override +
+	 * priority into a named "package" that can be enabled or disabled at
+	 * runtime. The pawn builds and registers one UInputMappingContext per
+	 * active mode; multiple active modes stack with priority-based conflict
+	 * resolution (Enhanced Input subsystem's native behavior).
 	 *
-	 * The override pattern lets designers customise key bindings without
-	 * recompiling C++; the in-code defaults keep the pawn usable out of the box.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UCameraInputBindings> InputBindingsOverride;
-
-	/**
-	 * Modular input behaviors. Each behavior declares zero or more action
-	 * specs (UCameraInputBehavior::GetActionSpecs) and implements the
-	 * dispatch (HandleAction). The pawn auto-binds every action declared
-	 * by any behavior in this array to the first behavior that claims it
-	 * (UCameraInputBehavior::HandlesAction). Stacking multiple behaviors
-	 * lets you add features (boost, focus, free-look) without touching
-	 * the pawn's C++.
-	 *
-	 * The default UCameraMovementBehavior is added in the constructor so
-	 * the camera works out of the box. Edit / remove it as needed; add
-	 * new behaviors via the Details panel "+" button.
+	 * The default constructor auto-registers a "Default" mode containing a
+	 * UCameraMovementBehavior, so the pawn works out of the box. Designers
+	 * add additional modes (UI, Combat, Cinematic, etc.) in the Details panel.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Instanced, Category = "Camera|Input")
-	TArray<TObjectPtr<UCameraInputBehavior>> Behaviors;
+	TArray<TObjectPtr<UCameraInputMode>> RegisteredModes;
 
-	/** Priority applied when registering the mapping context; higher values win conflicts. */
+	/** Priority fallback used by the (legacy) single-IMC initialization when no mode is active. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
 	int32 InputMappingPriority = 0;
 
 	/**
-	 * Active input context built in-memory from InputBindingsOverride (or the C++
-	 * defaults). Set on first InitializeInputMapping call; reused for the lifetime
-	 * of the pawn so the action list doesn't churn across BeginPlay / restart.
+	 * Active IMCs currently registered with the Enhanced Input subsystem.
+	 * Populated by InitializeInputMapping (and re-populated by EnableMode /
+	 * DisableMode). One entry per active mode.
 	 */
 	UPROPERTY(Transient)
-	TObjectPtr<UInputMappingContext> ActiveInputMapping = nullptr;
+	TArray<TObjectPtr<UInputMappingContext>> ActiveMappingContexts;
 
 	/** Interpolation speed for zoom smoothing (arm length). Higher = faster response. Safe range: 5.0-30.0. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
@@ -278,16 +306,31 @@ private:
 	/** Applies zoom by clamping arm length and repositioning pawn along focus direction. */
 	void ApplyZoom(float DesiredArmLength, const FVector& FocusPoint);
 
-	/** Registers the active input context (built from InputBindingsOverride, the Behaviors, or C++ defaults) with the local player's Enhanced Input subsystem. */
+	/**
+	 * Builds and registers IMCs for all active modes. Each mode contributes one
+	 * IMC; modes stack with the Enhanced Input subsystem's priority resolution.
+	 * No-op if ActiveMappingContexts is already populated.
+	 */
 	void InitializeInputMapping();
 
 	/**
-	 * Auto-binds every action in the active input context to the first behavior
-	 * in Behaviors that claims it. Called from SetupPlayerInputComponent.
-	 * For boolean (modifier) actions, both Triggered and Completed events are
-	 * bound so the pressed/released state is captured.
+	 * Tears down and rebuilds the active IMC set. Called by EnableMode /
+	 * DisableMode / SetExclusiveMode / RefreshActiveInputMappings.
 	 */
-	void AutoBindBehaviorsToContext(class UEnhancedInputComponent* EnhancedComponent);
+	void RebuildActiveMappingContexts();
+
+	/**
+	 * Auto-binds every action across all active IMCs to the first behavior in
+	 * the active modes' Behaviors[] arrays that claims it. Called from
+	 * SetupPlayerInputComponent (first init) and from RebuildActiveMappingContexts
+	 * (mode swap). For boolean (modifier) actions, both Triggered and Completed
+	 * events are bound so the pressed/released state is captured.
+	 */
+	void AutoBindBehaviorsToActiveContexts(class UEnhancedInputComponent* EnhancedComponent);
+
+	/** The set of mode names currently enabled. The pawn's "active" set. */
+	UPROPERTY(Transient)
+	TSet<FName> ActiveModes;
 
 	/** Tracks whether the Orbit Modifier (Right Mouse) is held down. Read/write by input behaviors. */
 	UPROPERTY(Transient)
