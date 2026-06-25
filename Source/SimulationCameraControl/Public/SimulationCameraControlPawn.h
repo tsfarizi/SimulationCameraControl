@@ -14,6 +14,20 @@ class UCameraInputBindings;
 class UCameraInputBehavior;
 struct FInputActionInstance;
 
+/** Fires when the pawn has built (or rebuilt) its in-memory UInputMappingContext,
+ *  before registration with the Enhanced Input subsystem. Use to inject runtime-only
+ *  triggers, dynamically add keys, or tag the context for downstream systems.
+ *  The context is parented to the pawn, so any UObject you NewObject with this
+ *  context as Outer gets GC'd with the pawn.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputContextBuilt, UInputMappingContext*, NewContext);
+
+/** Fires when the pawn has registered its IMC with the Enhanced Input subsystem
+ *  (i.e., the player's input pipeline is now hot). Use to play UI sounds, animate
+ *  HUD elements, or start auxiliary systems that need to know input is live.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputContextRegistered, UInputMappingContext*, RegisteredContext);
+
 /**
  * Specialized camera pawn for simulation controls.
  * Implements RTS-style camera controls (Zoom, Orbit, Pan) with smooth interpolation.
@@ -92,6 +106,33 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
 	void RemoveInputBehavior(UCameraInputBehavior* Behavior);
+
+	/**
+	 * Drop the current ActiveInputMapping so the next InitializeInputMapping call
+	 * rebuilds from scratch. Use after changing InputBindingsOverride, mutating
+	 * Behaviors, or after a settings reload. Does not unregister from the Enhanced
+	 * Input subsystem by itself - that happens on the next PossessedBy or
+	 * PawnClientRestart cycle (or call InitializeInputMapping directly).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	void RebuildInputContext();
+
+	/**
+	 * Fired after the in-memory UInputMappingContext has been built but before
+	 * it is registered with the Enhanced Input subsystem. Subscribers can mutate
+	 * the context (add triggers, swap modifiers, change key bindings) before
+	 * the player's input pipeline sees it.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
+	FOnInputContextBuilt OnInputContextBuilt;
+
+	/**
+	 * Fired after the IMC has been registered with the Enhanced Input subsystem.
+	 * At this point the player's input pipeline is hot and the pawn will start
+	 * receiving Triggered/Completed events on its behaviors.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
+	FOnInputContextRegistered OnInputContextRegistered;
 
 protected:
 	/** Root component - keeps explicit hierarchy Root -> SpringArm -> Camera. */

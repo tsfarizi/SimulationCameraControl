@@ -200,6 +200,12 @@ void ASimulationCameraControl::InitializeInputMapping()
 		return;
 	}
 
+	// Hook: post-build, pre-registration. Subscribers can mutate the IMC
+	// (add UInputTrigger* to specific mappings, swap UInputModifier* chains,
+	// add runtime-only keys, etc.) before the player's input pipeline
+	// actually subscribes to it.
+	OnInputContextBuilt.Broadcast(ActiveInputMapping);
+
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
 	{
@@ -229,6 +235,12 @@ void ASimulationCameraControl::InitializeInputMapping()
 	Subsystem->AddMappingContext(ActiveInputMapping, InputMappingPriority);
 	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("InitializeInputMapping: Added %s with priority %d for %s."),
 		*GetNameSafe(ActiveInputMapping), InputMappingPriority, *GetName());
+
+	// Hook: post-registration. At this point the Enhanced Input pipeline is
+	// live and the pawn's behaviors will start receiving Triggered/Completed
+	// events on the next player input. Use this to play UI sounds, animate
+	// HUD elements, kick off "input is now ready" notifications, etc.
+	OnInputContextRegistered.Broadcast(ActiveInputMapping);
 }
 
 void ASimulationCameraControl::AddInputBehavior(UCameraInputBehavior* Behavior)

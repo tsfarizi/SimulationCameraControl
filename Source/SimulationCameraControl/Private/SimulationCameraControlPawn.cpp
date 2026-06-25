@@ -159,6 +159,18 @@ void ASimulationCameraControl::SetInputMappingPriority(int32 InPriority)
 	InitializeInputMapping();
 }
 
+void ASimulationCameraControl::RebuildInputContext()
+{
+	// Drop the cached IMC so the next InitializeInputMapping call rebuilds.
+	// Note: this does NOT unregister the old IMC from the Enhanced Input
+	// subsystem - that happens lazily on the next PossessedBy or
+	// PawnClientRestart cycle, OR if the designer calls InitializeInputMapping
+	// directly (which will see the old ActiveInputMapping and skip - so
+	// they should also call SetInputEnabled(false) or trigger a re-possess
+	// if they need the unregister to happen immediately).
+	ActiveInputMapping = nullptr;
+}
+
 void ASimulationCameraControl::SetInputBindingsOverride(UCameraInputBindings* InBindings)
 {
 	if (InputBindingsOverride == InBindings)
