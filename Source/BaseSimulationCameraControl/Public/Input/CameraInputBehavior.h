@@ -10,7 +10,7 @@
 
 /**
  * UCameraInputBehavior
- * Base class for modular input behaviors attached to ASimulationCameraControl.
+ * Base class for modular input behaviors attached to ABaseSimulationCameraControl.
  *
  * Each behavior contributes zero or more action specs (FCameraInputActionSpec)
  * via GetActionSpecs() and implements HandleAction() to receive Triggered/
@@ -31,7 +31,7 @@
  * so they're GC-safe and Bind lambdas should hold TWeakObjectPtr<UCameraInputBehavior>.
  */
 UCLASS(Abstract, Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DefaultToInstanced)
-class SIMULATIONCAMERACONTROL_API UCameraInputBehavior : public UObject
+class BASESIMULATIONCAMERACONTROL_API UCameraInputBehavior : public UObject
 {
 	GENERATED_BODY()
 

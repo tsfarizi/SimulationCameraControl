@@ -38,7 +38,7 @@ class UCameraInputBehavior;
  * add additional modes (UI, Combat, etc.) in the Details panel.
  */
 UCLASS(Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DisplayName = "Camera Input Mode")
-class SIMULATIONCAMERACONTROL_API UCameraInputMode : public UObject
+class BASESIMULATIONCAMERACONTROL_API UCameraInputMode : public UObject
 {
 	GENERATED_BODY()
 

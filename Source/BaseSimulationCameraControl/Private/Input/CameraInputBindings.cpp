@@ -10,27 +10,47 @@ namespace
 {
 	/**
 	 * Build a FInputModifierSwizzleAxis from the (Axis, bNegate) tuple.
-	 * Returns nullptr if the modifier would be a no-op (plain X, no negate).
+	 * Returns nullptr if no swizzle is needed (i.e., the key already
+	 * contributes to the correct default axis — X).
+	 *
+	 * NEGATION NOTE: This function ONLY returns a swizzle modifier; it
+	 * does NOT apply negation. Negation for 2D/3D actions is handled by a
+	 * separate UInputModifierNegate added in BuildContext when bNegate is
+	 * true. This separation is necessary because FInputModifierSwizzleAxis
+	 * only reorders axes and cannot negate values.
 	 *
 	 * The UE swizzle enum describes (src.X, src.Y, src.Z) -> (dest.X, dest.Y, dest.Z)
 	 * for a 2D/3D value. The first character of the enum value is the destination
-	 * X source, second is dest Y, third is dest Z. We only care about 2D, so the
-	 * third slot is always Z (the dest Z for a 2D output is just dropped).
+	 * X source, second is dest Y, third is dest Z.
+	 *
+	 * Axis routing convention:
+	 *   "X"   → passthrough (no swizzle) — key's value stays in dest.X
+	 *   "Y"   → YXZ — routes input.X to output.Y (dest.X = src.Y, dest.Y = src.X)
+	 *   "XNeg"/"YNeg"/etc. → same swizzle as positive counterpart;
+	 *                         negation applied separately via UInputModifierNegate
 	 */
-	UInputModifierSwizzleAxis* MakeSwizzleModifier(FName Axis, bool bNegate)
+	UInputModifierSwizzleAxis* MakeSwizzleModifier(FName Axis)
 	{
 		EInputAxisSwizzle Swizzle;
-		bool bNeeded = bNegate; // Negate alone is a no-op without a swizzle unless the user wants pure negation
 
-		if (Axis == FName(TEXT("X")))        { Swizzle = EInputAxisSwizzle::YXZ; bNeeded = bNegate; }
-		else if (Axis == FName(TEXT("XNeg"))) { Swizzle = EInputAxisSwizzle::YXZ; bNeeded = true; }
-		else if (Axis == FName(TEXT("Y")))    { Swizzle = EInputAxisSwizzle::ZXY; bNeeded = true; }
-		else if (Axis == FName(TEXT("YNeg"))) { Swizzle = EInputAxisSwizzle::ZXY; bNeeded = true; }
-		else if (Axis == FName(TEXT("Z")))    { Swizzle = EInputAxisSwizzle::YZX; bNeeded = true; }
-		else if (Axis == FName(TEXT("ZNeg"))) { Swizzle = EInputAxisSwizzle::YZX; bNeeded = true; }
-		else                                  { Swizzle = EInputAxisSwizzle::YXZ; bNeeded = bNegate; }
-
-		if (!bNeeded)
+		if (Axis == FName(TEXT("X")) || Axis == FName(TEXT("XNeg")))
+		{
+			// X is the default axis; no swizzle needed.
+			return nullptr;
+		}
+		else if (Axis == FName(TEXT("Y")) || Axis == FName(TEXT("YNeg")))
+		{
+			// YXZ: output.X = input.Y, output.Y = input.X
+			// Routes a 1D key's input.X (value) into the action's Y axis.
+			Swizzle = EInputAxisSwizzle::YXZ;
+		}
+		else if (Axis == FName(TEXT("Z")) || Axis == FName(TEXT("ZNeg")))
+		{
+			// YZX: output.Y = input.Z, output.Z = input.X, output.X = input.Y
+			// Routes input into the Z axis.
+			Swizzle = EInputAxisSwizzle::YZX;
+		}
+		else
 		{
 			return nullptr;
 		}
@@ -81,9 +101,20 @@ UInputMappingContext* UCameraInputBindings::BuildContext(UObject* Outer) const
 			if (Spec.ValueType != EInputActionValueType::Boolean &&
 				Spec.ValueType != EInputActionValueType::Axis1D)
 			{
-				if (UInputModifierSwizzleAxis* Swizzle = MakeSwizzleModifier(KeySpec.Axis, KeySpec.bNegate))
+				// Swizzle reorders axes (e.g., routes a 1D key to the Y component).
+				// Returns nullptr for X-axis keys (passthrough).
+				if (UInputModifierSwizzleAxis* Swizzle = MakeSwizzleModifier(KeySpec.Axis))
 				{
 					Mapping.Modifiers.Add(Swizzle);
+				}
+
+				// Negation is applied as a separate modifier so it works
+				// independently of the swizzle. This fixes the bug where
+				// bNegate=true on 2D/3D actions was silently ignored.
+				if (KeySpec.bNegate)
+				{
+					UInputModifierNegate* Negate = NewObject<UInputModifierNegate>();
+					Mapping.Modifiers.Add(Negate);
 				}
 			}
 			else if (KeySpec.bNegate)
@@ -116,7 +147,7 @@ void UCameraInputBindings::PopulateDefaultActions()
 	Actions.Add({
 		FName(TEXT("IA_Orbit")),
 		EInputActionValueType::Axis2D,
-		{ { EKeys::Mouse2D, FName(TEXT("Y")), false } }
+		{ { EKeys::Mouse2D, FName(TEXT("X")), false } }
 	});
 
 	// IA_Orbit_Modifier: right mouse button (bool).
@@ -128,6 +159,8 @@ void UCameraInputBindings::PopulateDefaultActions()
 
 	// IA_Pan: WASD as 2D axis + middle-mouse 2D.
 	// W -> Y+, S -> Y-, D -> X+, A -> X- (each routed via SwizzleAxis + Negate as needed).
+	// Mouse2D uses Axis "X" so raw (DeltaX, DeltaY) passes through without a swizzle,
+	// allowing full 2D mouse-drag panning (both axes preserved).
 	// Pawn's HandlePanAction also accepts the modifier-held-down case for mouse movement.
 	Actions.Add({
 		FName(TEXT("IA_Pan")),
@@ -137,14 +170,14 @@ void UCameraInputBindings::PopulateDefaultActions()
 			{ EKeys::S, FName(TEXT("Y")),  true  },
 			{ EKeys::D, FName(TEXT("X")),  false },
 			{ EKeys::A, FName(TEXT("X")),  true  },
-			{ EKeys::Mouse2D, FName(TEXT("Y")), false },
+			{ EKeys::Mouse2D, FName(TEXT("X")), false },
 		}
 	});
 
-	// IA_Pan_Modifier: middle mouse button (bool). Gates middle-mouse drag panning.
+	// IA_Pan_Modifier: left mouse button (bool). Gates left-click drag panning.
 	Actions.Add({
 		FName(TEXT("IA_Pan_Modifier")),
 		EInputActionValueType::Boolean,
-		{ { EKeys::MiddleMouseButton, FName(TEXT("X")), false } }
+		{ { EKeys::LeftMouseButton, FName(TEXT("X")), false } }
 	});
 }

@@ -16,7 +16,7 @@
 	"Installed": false,
 	"Modules": [
 		{
-			"Name": "SimulationCameraControl",
+			"Name": "BaseSimulationCameraControl",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}

@@ -1,8 +1,8 @@
 // Copyright Teuku. All Rights Reserved.
 
 #include "CameraMovementBehavior.h"
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 #include "CameraInputDefaults.h"
 
 TArray<FCameraInputActionSpec> UCameraMovementBehavior::GetActionSpecs_Implementation() const
@@ -15,7 +15,7 @@ TArray<FCameraInputActionSpec> UCameraMovementBehavior::GetActionSpecs_Implement
 
 void UCameraMovementBehavior::HandleAction_Implementation(FName ActionName, const FInputActionValue& Value, UObject* Owner)
 {
-	ASimulationCameraControl* Pawn = Cast<ASimulationCameraControl>(Owner);
+	ABaseSimulationCameraControl* Pawn = Cast<ABaseSimulationCameraControl>(Owner);
 	if (!Pawn)
 	{
 		return;
@@ -60,13 +60,24 @@ void UCameraMovementBehavior::HandleAction_Implementation(FName ActionName, cons
 			return;
 		}
 		const FVector2D AxisValue = Value.Get<FVector2D>();
-		// Pan if the modifier (middle mouse) is held OR if the input is strong
-		// (WASD keys usually give +/- 1.0). This lets WASD work without holding
-		// the modifier while gating plain mouse movement.
 		const bool bIsKeyInput = FMath::Abs(AxisValue.X) >= 0.5f || FMath::Abs(AxisValue.Y) >= 0.5f;
+
+		// Gate: pan only when the modifier (left mouse button) is held (click-drag),
+		// or when input comes from a keyboard key (WASD ±1.0).
 		if (Pawn->IsPanModifierDown() || bIsKeyInput)
 		{
-			Pawn->Pan(AxisValue);
+			if (Pawn->IsPanModifierDown() && !bIsKeyInput)
+			{
+				// Mouse-drag: invert axes so dragging right moves the camera left
+				// ("grab the world and pull" feel, standard sim-game convention).
+				Pawn->Pan(FVector2D(-AxisValue.X, -AxisValue.Y));
+			}
+			else
+			{
+				// WASD keyboard: pass through as-is (W = forward, S = backward,
+				// D = right, A = left).
+				Pawn->Pan(AxisValue);
+			}
 		}
 	}
 	else if (ActionName == FName(TEXT("IA_Pan_Modifier")))

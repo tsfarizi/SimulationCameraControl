@@ -6,7 +6,7 @@
 #include "CameraInputBehavior.h"
 #include "CameraMovementBehavior.generated.h"
 
-class ASimulationCameraControl;
+class ABaseSimulationCameraControl;
 
 /**
  * UCameraMovementBehavior
@@ -20,7 +20,7 @@ class ASimulationCameraControl;
  * alongside this one without modifying any C++.
  */
 UCLASS(Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DisplayName = "Camera Movement")
-class SIMULATIONCAMERACONTROL_API UCameraMovementBehavior : public UCameraInputBehavior
+class BASESIMULATIONCAMERACONTROL_API UCameraMovementBehavior : public UCameraInputBehavior
 {
 	GENERATED_BODY()
 

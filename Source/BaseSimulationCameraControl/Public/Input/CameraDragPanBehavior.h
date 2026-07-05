@@ -40,7 +40,7 @@
  *     "camera follows the cursor" feel.
  */
 UCLASS(Blueprintable, BlueprintType, EditInlineNew, CollapseCategories, DisplayName = "Camera Drag Pan")
-class SIMULATIONCAMERACONTROL_API UCameraDragPanBehavior : public UCameraInputBehavior
+class BASESIMULATIONCAMERACONTROL_API UCameraDragPanBehavior : public UCameraInputBehavior
 {
 	GENERATED_BODY()
 

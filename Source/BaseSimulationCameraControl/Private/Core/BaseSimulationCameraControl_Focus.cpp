@@ -1,12 +1,12 @@
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 
 using SimulationCameraControl::Private::IsVectorFinite;
 
-bool ASimulationCameraControl::GetCursorWorldPoint(FVector& OutPoint)
+bool ABaseSimulationCameraControl::GetCursorWorldPoint(FVector& OutPoint)
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC)
@@ -92,7 +92,7 @@ bool ASimulationCameraControl::GetCursorWorldPoint(FVector& OutPoint)
 	return true;
 }
 
-FVector ASimulationCameraControl::GetStableFocusPoint()
+FVector ABaseSimulationCameraControl::GetStableFocusPoint()
 {
 	FVector SamplePoint = FVector::ZeroVector;
 	const bool bHasSample = GetCursorWorldPoint(SamplePoint);

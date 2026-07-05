@@ -4,7 +4,7 @@
 
 #include "Modules/ModuleManager.h"
 
-class FSimulationCameraControlModule : public IModuleInterface
+class FBaseSimulationCameraControlModule : public IModuleInterface
 {
 public:
 

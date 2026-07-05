@@ -27,7 +27,7 @@ namespace CameraInputDefaults
 		});
 
 		Make(FName(TEXT("IA_Orbit")), EInputActionValueType::Axis2D, {
-			FCameraInputKeySpec{ EKeys::Mouse2D, FName(TEXT("Y")), false }
+			FCameraInputKeySpec{ EKeys::Mouse2D, FName(TEXT("X")), false }
 		});
 
 		Make(FName(TEXT("IA_Orbit_Modifier")), EInputActionValueType::Boolean, {
@@ -39,11 +39,11 @@ namespace CameraInputDefaults
 			FCameraInputKeySpec{ EKeys::S, FName(TEXT("Y")), true  },
 			FCameraInputKeySpec{ EKeys::D, FName(TEXT("X")), false },
 			FCameraInputKeySpec{ EKeys::A, FName(TEXT("X")), true  },
-			FCameraInputKeySpec{ EKeys::Mouse2D, FName(TEXT("Y")), false },
+			FCameraInputKeySpec{ EKeys::Mouse2D, FName(TEXT("X")), false },
 		});
 
 		Make(FName(TEXT("IA_Pan_Modifier")), EInputActionValueType::Boolean, {
-			FCameraInputKeySpec{ EKeys::MiddleMouseButton, FName(TEXT("X")), false }
+			FCameraInputKeySpec{ EKeys::LeftMouseButton, FName(TEXT("X")), false }
 		});
 
 		return Specs;

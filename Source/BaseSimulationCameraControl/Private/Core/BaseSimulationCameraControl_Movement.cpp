@@ -1,5 +1,5 @@
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
@@ -8,7 +8,7 @@
 using SimulationCameraControl::Private::IsVectorFinite;
 using SimulationCameraControl::Private::KINDA_SMALL_NUMBER_CM;
 
-void ASimulationCameraControl::Zoom(float AxisValue)
+void ABaseSimulationCameraControl::Zoom(float AxisValue)
 {
 	const float CurrentArm = SpringArm ? SpringArm->TargetArmLength : -1.0f;
 	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Zoom: Axis=%.3f Arm=%.2f Input=%s"),
@@ -30,7 +30,7 @@ void ASimulationCameraControl::Zoom(float AxisValue)
 	ApplyZoom(DesiredArmLength, FocusPoint);
 }
 
-void ASimulationCameraControl::Orbit(FVector2D AxisValue)
+void ABaseSimulationCameraControl::Orbit(FVector2D AxisValue)
 {
 	const FRotator CurrentRotation = SpringArm ? SpringArm->GetRelativeRotation() : FRotator::ZeroRotator;
 	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Orbit: Axis=(%.3f, %.3f) Rot=%s Input=%s"),
@@ -63,7 +63,7 @@ void ASimulationCameraControl::Orbit(FVector2D AxisValue)
 		*TargetRelativeRotation.ToCompactString(), TargetArmLength);
 }
 
-void ASimulationCameraControl::Pan(FVector2D AxisValue)
+void ABaseSimulationCameraControl::Pan(FVector2D AxisValue)
 {
 	const FVector CurrentLocation = GetActorLocation();
 	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Pan: Axis=(%.3f, %.3f) Loc=%s Input=%s"),
@@ -97,7 +97,7 @@ void ASimulationCameraControl::Pan(FVector2D AxisValue)
 		Right = FVector::RightVector;
 	}
 
-	FVector Movement = -(Forward * AxisValue.Y + Right * AxisValue.X) * PanSpeed * DeltaSeconds;
+	FVector Movement = (Forward * AxisValue.Y + Right * AxisValue.X) * PanSpeed * DeltaSeconds;
 	Movement.Z = 0.0f;
 
 	if (Movement.IsNearlyZero())
@@ -131,7 +131,7 @@ void ASimulationCameraControl::Pan(FVector2D AxisValue)
 		*Movement.ToCompactString(), *TargetActorLocation.ToCompactString());
 }
 
-void ASimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& FocusPoint)
+void ABaseSimulationCameraControl::ApplyZoom(float DesiredArmLength, const FVector& FocusPoint)
 {
 	if (!SpringArm)
 	{

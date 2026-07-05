@@ -17,7 +17,7 @@ class UInputMappingContext;
  * The factory translates this into the appropriate FInputModifierSwizzleAxis.
  */
 USTRUCT(BlueprintType)
-struct SIMULATIONCAMERACONTROL_API FCameraInputKeySpec
+struct BASESIMULATIONCAMERACONTROL_API FCameraInputKeySpec
 {
 	GENERATED_BODY()
 
@@ -39,7 +39,7 @@ struct SIMULATIONCAMERACONTROL_API FCameraInputKeySpec
  * The pawn calls Handle<ActionName>Action on Triggered events.
  */
 USTRUCT(BlueprintType)
-struct SIMULATIONCAMERACONTROL_API FCameraInputActionSpec
+struct BASESIMULATIONCAMERACONTROL_API FCameraInputActionSpec
 {
 	GENERATED_BODY()
 
@@ -66,7 +66,7 @@ struct SIMULATIONCAMERACONTROL_API FCameraInputActionSpec
  *   2. An entry in this DataAsset (or the C++ defaults if no override is set)
  */
 UCLASS(BlueprintType)
-class SIMULATIONCAMERACONTROL_API UCameraInputBindings : public UDataAsset
+class BASESIMULATIONCAMERACONTROL_API UCameraInputBindings : public UDataAsset
 {
 	GENERATED_BODY()
 

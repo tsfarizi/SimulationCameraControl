@@ -1,7 +1,7 @@
 // Copyright Teuku. All Rights Reserved.
 
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 #include "CameraInputBindings.h"
 #include "CameraInputDefaults.h"
 #include "CameraInputBehavior.h"
@@ -14,7 +14,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
 
-void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void ABaseSimulationCameraControl::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
@@ -48,7 +48,7 @@ void ASimulationCameraControl::SetupPlayerInputComponent(UInputComponent* Player
 	AutoBindBehaviorsToActiveContexts(EnhancedComponent);
 }
 
-void ASimulationCameraControl::AutoBindBehaviorsToActiveContexts(UEnhancedInputComponent* EnhancedComponent)
+void ABaseSimulationCameraControl::AutoBindBehaviorsToActiveContexts(UEnhancedInputComponent* EnhancedComponent)
 {
 	if (!EnhancedComponent || ActiveMappingContexts.Num() == 0)
 	{
@@ -175,7 +175,7 @@ void ASimulationCameraControl::AutoBindBehaviorsToActiveContexts(UEnhancedInputC
 	}
 }
 
-void ASimulationCameraControl::InitializeInputMapping()
+void ABaseSimulationCameraControl::InitializeInputMapping()
 {
 	// First-time init: register all currently-active modes. The constructor
 	// auto-adds "Default" to ActiveModes so the pawn works out of the box.
@@ -206,7 +206,7 @@ void ASimulationCameraControl::InitializeInputMapping()
 	RebuildActiveMappingContexts();
 }
 
-void ASimulationCameraControl::RebuildActiveMappingContexts()
+void ABaseSimulationCameraControl::RebuildActiveMappingContexts()
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = nullptr;
@@ -283,7 +283,7 @@ void ASimulationCameraControl::RebuildActiveMappingContexts()
 	}
 }
 
-bool ASimulationCameraControl::EnableMode(FName ModeName)
+bool ABaseSimulationCameraControl::EnableMode(FName ModeName)
 {
 	UCameraInputMode* Mode = nullptr;
 	for (UCameraInputMode* Candidate : RegisteredModes)
@@ -315,7 +315,7 @@ bool ASimulationCameraControl::EnableMode(FName ModeName)
 	return true;
 }
 
-bool ASimulationCameraControl::DisableMode(FName ModeName)
+bool ABaseSimulationCameraControl::DisableMode(FName ModeName)
 {
 	if (!ActiveModes.Contains(ModeName))
 	{
@@ -331,7 +331,7 @@ bool ASimulationCameraControl::DisableMode(FName ModeName)
 	return true;
 }
 
-bool ASimulationCameraControl::SetExclusiveMode(FName ModeName)
+bool ABaseSimulationCameraControl::SetExclusiveMode(FName ModeName)
 {
 	UCameraInputMode* Mode = nullptr;
 	for (UCameraInputMode* Candidate : RegisteredModes)
@@ -364,7 +364,7 @@ bool ASimulationCameraControl::SetExclusiveMode(FName ModeName)
 	return true;
 }
 
-bool ASimulationCameraControl::ToggleMode(FName ModeName)
+bool ABaseSimulationCameraControl::ToggleMode(FName ModeName)
 {
 	if (IsModeActive(ModeName))
 	{
@@ -373,7 +373,7 @@ bool ASimulationCameraControl::ToggleMode(FName ModeName)
 	return EnableMode(ModeName);
 }
 
-void ASimulationCameraControl::AddInputBehavior(UCameraInputBehavior* Behavior, FName ModeName)
+void ABaseSimulationCameraControl::AddInputBehavior(UCameraInputBehavior* Behavior, FName ModeName)
 {
 	if (!Behavior)
 	{
@@ -426,7 +426,7 @@ void ASimulationCameraControl::AddInputBehavior(UCameraInputBehavior* Behavior, 
 	}
 }
 
-void ASimulationCameraControl::RemoveInputBehavior(UCameraInputBehavior* Behavior)
+void ABaseSimulationCameraControl::RemoveInputBehavior(UCameraInputBehavior* Behavior)
 {
 	if (!Behavior)
 	{
@@ -455,7 +455,7 @@ void ASimulationCameraControl::RemoveInputBehavior(UCameraInputBehavior* Behavio
 	}
 }
 
-void ASimulationCameraControl::RefreshActiveInputMappings()
+void ABaseSimulationCameraControl::RefreshActiveInputMappings()
 {
 	ActiveMappingContexts.Reset();
 	RebuildActiveMappingContexts();

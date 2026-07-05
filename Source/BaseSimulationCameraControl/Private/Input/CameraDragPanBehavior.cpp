@@ -1,8 +1,8 @@
 // Copyright Teuku. All Rights Reserved.
 
 #include "CameraDragPanBehavior.h"
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 
 TArray<FCameraInputActionSpec> UCameraDragPanBehavior::GetActionSpecs_Implementation() const
 {
@@ -45,7 +45,7 @@ TArray<FCameraInputActionSpec> UCameraDragPanBehavior::GetActionSpecs_Implementa
 
 void UCameraDragPanBehavior::HandleAction_Implementation(FName ActionName, const FInputActionValue& Value, UObject* Owner)
 {
-	ASimulationCameraControl* Pawn = Cast<ASimulationCameraControl>(Owner);
+	ABaseSimulationCameraControl* Pawn = Cast<ABaseSimulationCameraControl>(Owner);
 	if (!Pawn)
 	{
 		return;

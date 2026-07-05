@@ -17,7 +17,7 @@ class UInputMappingContext;
 namespace CameraInputDefaults
 {
 	/** The 5 actions every SimulationCameraControl pawn expects by name. */
-	SIMULATIONCAMERACONTROL_API TArray<FCameraInputActionSpec> GetDefaultActionSpecs();
+	BASESIMULATIONCAMERACONTROL_API TArray<FCameraInputActionSpec> GetDefaultActionSpecs();
 
 	/**
 	 * Build a runtime UInputMappingContext from the hardcoded defaults.
@@ -25,5 +25,5 @@ namespace CameraInputDefaults
 	 * keeps the context alive alongside the pawn). Falls back to the
 	 * transient package if Outer is null.
 	 */
-	SIMULATIONCAMERACONTROL_API UInputMappingContext* MakeDefaultContext(UObject* Outer);
+	BASESIMULATIONCAMERACONTROL_API UInputMappingContext* MakeDefaultContext(UObject* Outer);
 }

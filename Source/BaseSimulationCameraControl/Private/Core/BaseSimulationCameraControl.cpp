@@ -1,5 +1,5 @@
-#include "SimulationCameraControlPawn.h"
-#include "SimulationCameraControlPawn_Internal.h"
+#include "BaseSimulationCameraControl.h"
+#include "BaseSimulationCameraControl_Internal.h"
 #include "CameraInputBehavior.h"
 #include "CameraInputMode.h"
 #include "CameraMovementBehavior.h"
@@ -9,7 +9,7 @@
 
 DEFINE_LOG_CATEGORY(LogSimulationCameraControl);
 
-ASimulationCameraControl::ASimulationCameraControl()
+ABaseSimulationCameraControl::ABaseSimulationCameraControl()
 {
 	// Enable Tick for smooth interpolation
 	PrimaryActorTick.bCanEverTick = true;
@@ -53,7 +53,7 @@ ASimulationCameraControl::ASimulationCameraControl()
 	ActiveModes.Add(FName(TEXT("Default")));
 }
 
-void ASimulationCameraControl::BeginPlay()
+void ABaseSimulationCameraControl::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -76,7 +76,7 @@ void ASimulationCameraControl::BeginPlay()
 	InitializeInputMapping();
 }
 
-void ASimulationCameraControl::Tick(float DeltaTime)
+void ABaseSimulationCameraControl::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
@@ -140,19 +140,19 @@ void ASimulationCameraControl::Tick(float DeltaTime)
 	}
 }
 
-void ASimulationCameraControl::PossessedBy(AController* NewController)
+void ABaseSimulationCameraControl::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	InitializeInputMapping();
 }
 
-void ASimulationCameraControl::PawnClientRestart()
+void ABaseSimulationCameraControl::PawnClientRestart()
 {
 	Super::PawnClientRestart();
 	InitializeInputMapping();
 }
 
-void ASimulationCameraControl::SetInputEnabled(bool bInEnabled)
+void ABaseSimulationCameraControl::SetInputEnabled(bool bInEnabled)
 {
 	const bool bOldState = bInputEnabled;
 	bInputEnabled = bInEnabled;
@@ -161,13 +161,13 @@ void ASimulationCameraControl::SetInputEnabled(bool bInEnabled)
 		bInputEnabled ? TEXT("true") : TEXT("false"));
 }
 
-void ASimulationCameraControl::SetInputMappingPriority(int32 InPriority)
+void ABaseSimulationCameraControl::SetInputMappingPriority(int32 InPriority)
 {
 	InputMappingPriority = FMath::Max(0, InPriority);
 	RefreshActiveInputMappings();
 }
 
-void ASimulationCameraControl::RebuildInputContext()
+void ABaseSimulationCameraControl::RebuildInputContext()
 {
 	// Drop all cached mode IMCs so the next build starts fresh. Note: this
 	// does NOT unregister from the Enhanced Input subsystem by itself. The

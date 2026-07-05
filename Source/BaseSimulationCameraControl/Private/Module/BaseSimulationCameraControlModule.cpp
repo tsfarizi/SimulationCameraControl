@@ -1,15 +1,15 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "SimulationCameraControlModule.h"
+#include "BaseSimulationCameraControlModule.h"
 
-#define LOCTEXT_NAMESPACE "FSimulationCameraControlModule"
+#define LOCTEXT_NAMESPACE "FBaseSimulationCameraControlModule"
 
-void FSimulationCameraControlModule::StartupModule()
+void FBaseSimulationCameraControlModule::StartupModule()
 {
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
 }
 
-void FSimulationCameraControlModule::ShutdownModule()
+void FBaseSimulationCameraControlModule::ShutdownModule()
 {
 	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
 	// we call this function before unloading the module.
@@ -17,4 +17,4 @@ void FSimulationCameraControlModule::ShutdownModule()
 
 #undef LOCTEXT_NAMESPACE
 	
-IMPLEMENT_MODULE(FSimulationCameraControlModule, SimulationCameraControl)
+IMPLEMENT_MODULE(FBaseSimulationCameraControlModule, BaseSimulationCameraControl)
