@@ -7,15 +7,7 @@
 class UCameraComponent;
 class USpringArmComponent;
 class USceneComponent;
-class UInputAction;
-class UInputMappingContext;
-class UCameraInputBindings;
-class UCameraInputBehavior;
-class UCameraInputMode;
-struct FInputActionInstance;
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputContextBuilt, UInputMappingContext*, NewContext);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInputContextRegistered, UInputMappingContext*, RegisteredContext);
+class UEnhancedInputComponent;
 
 UCLASS(Blueprintable)
 class BASESIMULATIONCAMERACONTROL_API ABaseSimulationCameraControl : public APawn
@@ -28,65 +20,18 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	virtual void PossessedBy(AController* NewController) override;
-	virtual void PawnClientRestart() override;
 
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	UFUNCTION(BlueprintCallable, Category = "Camera|Control")
 	void SetInputEnabled(bool bInEnabled);
 
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	UFUNCTION(BlueprintCallable, Category = "Camera|Control")
 	void Zoom(float AxisValue);
 
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	UFUNCTION(BlueprintCallable, Category = "Camera|Control")
 	void Orbit(FVector2D AxisValue);
 
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
+	UFUNCTION(BlueprintCallable, Category = "Camera|Control")
 	void Pan(FVector2D AxisValue);
-
-	UFUNCTION(BlueprintCallable, Category="Camera|Input")
-	void SetInputMappingPriority(int32 InPriority);
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool IsOrbitModifierDown() const { return bIsOrbitModifierDown; }
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void SetOrbitModifierDown(bool bDown) { bIsOrbitModifierDown = bDown; }
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool IsPanModifierDown() const { return bIsPanModifierDown; }
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void SetPanModifierDown(bool bDown) { bIsPanModifierDown = bDown; }
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void AddInputBehavior(UCameraInputBehavior* Behavior, FName ModeName = TEXT("Default"));
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void RemoveInputBehavior(UCameraInputBehavior* Behavior);
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void RebuildInputContext();
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	void RefreshActiveInputMappings();
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool EnableMode(FName ModeName);
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool DisableMode(FName ModeName);
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool SetExclusiveMode(FName ModeName);
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool IsModeActive(FName ModeName) const { return ActiveModes.Contains(ModeName); }
-
-	UFUNCTION(BlueprintCallable, Category = "Camera|Input")
-	bool ToggleMode(FName ModeName);
-
-	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
-	FOnInputContextBuilt OnInputContextBuilt;
-
-	UPROPERTY(BlueprintAssignable, Category = "Camera|Input")
-	FOnInputContextRegistered OnInputContextRegistered;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
@@ -140,15 +85,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Debug")
 	bool bDebug = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Instanced, Category = "Camera|Input")
-	TArray<TObjectPtr<UCameraInputMode>> RegisteredModes;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Input", meta = (ClampMin = "0"))
-	int32 InputMappingPriority = 0;
-
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UInputMappingContext>> ActiveMappingContexts;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing", meta = (ClampMin = "0.1"))
 	float ZoomInterpSpeed = 15.0f;
 
@@ -171,18 +107,6 @@ private:
 	bool GetCursorWorldPoint(FVector& OutPoint);
 	FVector GetStableFocusPoint();
 	void ApplyZoom(float DesiredArmLength, const FVector& FocusPoint);
-	void InitializeInputMapping();
-	void RebuildActiveMappingContexts();
-	void AutoBindBehaviorsToActiveContexts(class UEnhancedInputComponent* EnhancedComponent);
-
-	UPROPERTY(Transient)
-	TSet<FName> ActiveModes;
-
-	UPROPERTY(Transient)
-	bool bIsOrbitModifierDown = false;
-
-	UPROPERTY(Transient)
-	bool bIsPanModifierDown = false;
 
 	FVector LastValidHitLocation = FVector::ZeroVector;
 	bool bHasCachedFocus = false;

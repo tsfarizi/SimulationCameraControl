@@ -1,17 +1,18 @@
 #include "BaseSimulationCameraControl.h"
 #include "BaseSimulationCameraControl_Internal.h"
-#include "CameraInputBehavior.h"
-#include "CameraInputMode.h"
-#include "CameraMovementBehavior.h"
+#include "CameraInputComponent.h"
+#include "CameraMovementComponent.h"
+#include "CameraDragPanComponent.h"
+#include "SimulationCameraController.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "EnhancedInputComponent.h"
 
 DEFINE_LOG_CATEGORY(LogSimulationCameraControl);
 
 ABaseSimulationCameraControl::ABaseSimulationCameraControl()
 {
-	// Enable Tick for smooth interpolation
 	PrimaryActorTick.bCanEverTick = true;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
@@ -34,23 +35,9 @@ ABaseSimulationCameraControl::ABaseSimulationCameraControl()
 
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
 
-	// Initialize target values for smoothing
 	TargetArmLength = SpringArm->TargetArmLength;
 	TargetRelativeRotation = SpringArm->GetRelativeRotation();
-
-	// Default input mode: provides the 5 standard camera-movement actions
-	// (Zoom, Orbit, Orbit_Modifier, Pan, Pan_Modifier) so the pawn works out of
-	// the box. Designers can edit / remove this mode in the Details panel; add
-	// additional modes (UI, Combat, Cinematic, etc.) as siblings in the
-	// RegisteredModes array. ActiveModes is initialised to {"Default"} so the
-	// pawn's first PossessedBy / BeginPlay has a working input set.
-	UCameraInputMode* DefaultMode = CreateDefaultSubobject<UCameraInputMode>(TEXT("DefaultInputMode"));
-	DefaultMode->ModeName = FName(TEXT("Default"));
-	DefaultMode->Priority = 0;
-	UCameraMovementBehavior* DefaultMovement = CreateDefaultSubobject<UCameraMovementBehavior>(TEXT("DefaultCameraMovement"));
-	DefaultMode->Behaviors.Add(DefaultMovement);
-	RegisteredModes.Add(DefaultMode);
-	ActiveModes.Add(FName(TEXT("Default")));
+	TargetActorLocation = FVector::ZeroVector;
 }
 
 void ABaseSimulationCameraControl::BeginPlay()
@@ -59,8 +46,8 @@ void ABaseSimulationCameraControl::BeginPlay()
 
 	if (MinPitch > MaxPitch)
 	{
-		UE_LOG(LogSimulationCameraControl, Warning, TEXT("BeginPlay: MinPitch %.2f > MaxPitch %.2f. Swapping values to preserve clamp."),
-			MinPitch, MaxPitch);
+		UE_LOG(LogSimulationCameraControl, Warning,
+			TEXT("BeginPlay: MinPitch %.2f > MaxPitch %.2f. Swapping values."), MinPitch, MaxPitch);
 		Swap(MinPitch, MaxPitch);
 	}
 
@@ -73,19 +60,29 @@ void ABaseSimulationCameraControl::BeginPlay()
 		bTargetsInitialized = true;
 	}
 
-	InitializeInputMapping();
+	TArray<UCameraInputComponent*> InputComps;
+	GetComponents(InputComps);
+	for (UCameraInputComponent* Comp : InputComps)
+	{
+		if (UCameraMovementComponent* MoveComp = Cast<UCameraMovementComponent>(Comp))
+		{
+			MoveComp->OnZoomInput.AddDynamic(this, &ABaseSimulationCameraControl::Zoom);
+			MoveComp->OnOrbitInput.AddDynamic(this, &ABaseSimulationCameraControl::Orbit);
+			MoveComp->OnPanInput.AddDynamic(this, &ABaseSimulationCameraControl::Pan);
+		}
+		if (UCameraDragPanComponent* DragComp = Cast<UCameraDragPanComponent>(Comp))
+		{
+			DragComp->OnDragPanInput.AddDynamic(this, &ABaseSimulationCameraControl::Pan);
+		}
+	}
 }
 
 void ABaseSimulationCameraControl::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (DeltaTime <= 0.0f || !SpringArm)
-	{
-		return;
-	}
+	if (DeltaTime <= 0.0f || !SpringArm) return;
 
-	// Smooth zoom interpolation (arm length)
 	if (bSmoothZoom)
 	{
 		const float CurrentArmLength = SpringArm->TargetArmLength;
@@ -97,7 +94,6 @@ void ABaseSimulationCameraControl::Tick(float DeltaTime)
 		SpringArm->TargetArmLength = FMath::Clamp(TargetArmLength, MinArmLength, MaxArmLength);
 	}
 
-	// Smooth orbit interpolation (rotation)
 	if (bSmoothOrbit)
 	{
 		const FRotator CurrentRotation = SpringArm->GetRelativeRotation();
@@ -114,12 +110,11 @@ void ABaseSimulationCameraControl::Tick(float DeltaTime)
 		SpringArm->SetRelativeRotation(ClampedRotation);
 	}
 
-	// Smooth pan interpolation (location)
 	if (bSmoothPan)
 	{
 		const FVector CurrentLocation = GetActorLocation();
 		FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetActorLocation, DeltaTime, PanInterpSpeed);
-		NewLocation.Z = CurrentLocation.Z; // Maintain Z height
+		NewLocation.Z = CurrentLocation.Z;
 		SetActorLocation(NewLocation);
 
 		if (bHasCachedFocus)
@@ -130,7 +125,7 @@ void ABaseSimulationCameraControl::Tick(float DeltaTime)
 	else
 	{
 		FVector NewLocation = TargetActorLocation;
-		NewLocation.Z = GetActorLocation().Z; // Maintain Z height
+		NewLocation.Z = GetActorLocation().Z;
 		SetActorLocation(NewLocation);
 
 		if (bHasCachedFocus)
@@ -140,46 +135,20 @@ void ABaseSimulationCameraControl::Tick(float DeltaTime)
 	}
 }
 
-void ABaseSimulationCameraControl::PossessedBy(AController* NewController)
+void ABaseSimulationCameraControl::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	Super::PossessedBy(NewController);
-	InitializeInputMapping();
-}
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-void ABaseSimulationCameraControl::PawnClientRestart()
-{
-	Super::PawnClientRestart();
-	InitializeInputMapping();
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		if (ASimulationCameraController* PC = Cast<ASimulationCameraController>(GetController()))
+		{
+			PC->BindActionsToEnhancedInput(EIC);
+		}
+	}
 }
 
 void ABaseSimulationCameraControl::SetInputEnabled(bool bInEnabled)
 {
-	const bool bOldState = bInputEnabled;
 	bInputEnabled = bInEnabled;
-	UE_LOG(LogSimulationCameraControl, Verbose, TEXT("SetInputEnabled: %s -> %s"),
-		bOldState ? TEXT("true") : TEXT("false"),
-		bInputEnabled ? TEXT("true") : TEXT("false"));
-}
-
-void ABaseSimulationCameraControl::SetInputMappingPriority(int32 InPriority)
-{
-	InputMappingPriority = FMath::Max(0, InPriority);
-	RefreshActiveInputMappings();
-}
-
-void ABaseSimulationCameraControl::RebuildInputContext()
-{
-	// Drop all cached mode IMCs so the next build starts fresh. Note: this
-	// does NOT unregister from the Enhanced Input subsystem by itself. The
-	// caller should follow up with RefreshActiveInputMappings() to take
-	// effect immediately, or wait for the next PossessedBy/PawnClientRestart
-	// cycle (which calls InitializeInputMapping).
-	for (UCameraInputMode* Mode : RegisteredModes)
-	{
-		if (Mode)
-		{
-			Mode->InvalidateBuiltContext();
-		}
-	}
-	ActiveMappingContexts.Reset();
 }
