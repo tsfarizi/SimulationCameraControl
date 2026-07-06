@@ -2,11 +2,14 @@
 #include "CameraInputComponent.h"
 #include "CameraInputBindings.h"
 #include "CameraInputDefaults.h"
+#include "ISelectableInterface.h"
 #include "BaseSimulationCameraControl_Internal.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/HitResult.h"
+#include "GameFramework/Actor.h"
 
 void ASimulationCameraController::OnPossess(APawn* InPawn)
 {
@@ -59,6 +62,16 @@ void ASimulationCameraController::SetupCameraInput()
 		{
 			AllSpecs.Append(Comp->GetActionSpecs());
 		}
+	}
+
+	// Controller-owned IA_Click: drives HandleInteractionClick (selection raycast).
+	// Appended last so component-owned actions resolve first in the IMC dispatch.
+	{
+		FCameraInputActionSpec ClickSpec;
+		ClickSpec.ActionName = FName(TEXT("IA_Click"));
+		ClickSpec.ValueType = EInputActionValueType::Boolean;
+		ClickSpec.DefaultKeys.Add(FCameraInputKeySpec{ EKeys::LeftMouseButton, FName(TEXT("X")), false });
+		AllSpecs.Add(ClickSpec);
 	}
 
 	if (AllSpecs.Num() == 0)
@@ -143,6 +156,25 @@ void ASimulationCameraController::BindActionsToEnhancedInput(UEnhancedInputCompo
 		const UInputAction* Action = Mapping.Action.Get();
 		const FName ActionName = Action->GetFName();
 
+		// Controller-owned actions: route to the controller itself, not to a
+		// component. IA_Click is the only one today; add more here as needed.
+		if (ActionName == FName(TEXT("IA_Click")))
+		{
+			TWeakObjectPtr<ASimulationCameraController> WeakSelf(this);
+			EIC->BindActionValueLambda(Action, ETriggerEvent::Started,
+				[WeakSelf](const FInputActionValue& /*Value*/)
+				{
+					if (ASimulationCameraController* Self = WeakSelf.Get())
+					{
+						Self->HandleInteractionClick();
+					}
+				});
+
+			UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Bound: %s -> %s (Controller)"),
+				*ActionName.ToString(), *GetNameSafe(this));
+			continue;
+		}
+
 		UCameraInputComponent* HandlerComp = nullptr;
 		for (UCameraInputComponent* Comp : InputComps)
 		{
@@ -186,5 +218,25 @@ void ASimulationCameraController::BindActionsToEnhancedInput(UEnhancedInputCompo
 
 		UE_LOG(LogSimulationCameraControl, Verbose, TEXT("Bound: %s -> %s"),
 			*ActionName.ToString(), *GetNameSafe(HandlerComp));
+	}
+}
+
+void ASimulationCameraController::HandleInteractionClick()
+{
+	FHitResult HitResult;
+	if (!GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(InteractionTraceChannel), false, HitResult))
+	{
+		return;
+	}
+
+	AActor* HitActor = HitResult.GetActor();
+	if (!HitActor)
+	{
+		return;
+	}
+
+	if (HitActor->Implements<USelectableInterface>())
+	{
+		ISelectableInterface::Execute_OnSelected(HitActor);
 	}
 }

@@ -103,10 +103,31 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Smoothing")
 	bool bSmoothPan = true;
 
+	/** Master toggle for the terrain clamp that prevents the camera from clipping into hills. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Control")
+	bool bEnableGroundClamp = true;
+
+	/** How far above the hit surface the camera pawn is forced to stay (cm). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Control", meta = (ClampMin = "0.0"))
+	float MinAltitudeAboveGround = 50.0f;
+
+	/** Length of the upward portion of the terrain line trace, starting from the pawn (cm). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Control", meta = (ClampMin = "0.0"))
+	float GroundTraceUpOffset = 200.0f;
+
+	/** Length of the downward portion of the terrain line trace (cm). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Control", meta = (ClampMin = "100.0"))
+	float GroundTraceDownDistance = 5000.0f;
+
+	/** Collision channel used for the terrain line trace. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Control")
+	TEnumAsByte<ECollisionChannel> GroundTraceChannel = ECC_WorldStatic;
+
 private:
 	bool GetCursorWorldPoint(FVector& OutPoint);
 	FVector GetStableFocusPoint();
 	void ApplyZoom(float DesiredArmLength, const FVector& FocusPoint);
+	void ApplyTerrainClamp();
 
 	FVector LastValidHitLocation = FVector::ZeroVector;
 	bool bHasCachedFocus = false;

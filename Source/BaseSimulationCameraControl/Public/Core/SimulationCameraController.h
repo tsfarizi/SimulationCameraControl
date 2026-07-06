@@ -26,6 +26,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera Input")
 	void BindActionsToEnhancedInput(UEnhancedInputComponent* EIC);
 
+	/**
+	 * Primary interaction handler. Raycasts under the cursor using the
+	 * configured interaction trace channel. If the hit actor implements
+	 * USelectableInterface, OnSelected is dispatched. Safe to call from
+	 * Blueprint or from the IA_Click input action binding.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera Interaction")
+	void HandleInteractionClick();
+
+	/** Collision channel used by HandleInteractionClick for the cursor raycast. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera Interaction")
+	TEnumAsByte<ECollisionChannel> InteractionTraceChannel = ECC_Visibility;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Input")
 	TObjectPtr<UCameraInputBindings> InputBindingsOverride;
 

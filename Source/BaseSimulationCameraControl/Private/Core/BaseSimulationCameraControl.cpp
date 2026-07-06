@@ -3,11 +3,14 @@
 #include "CameraInputComponent.h"
 #include "CameraMovementComponent.h"
 #include "CameraDragPanComponent.h"
+#include "CameraEdgePanComponent.h"
 #include "SimulationCameraController.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/World.h"
+#include "Engine/HitResult.h"
 
 DEFINE_LOG_CATEGORY(LogSimulationCameraControl);
 
@@ -75,6 +78,13 @@ void ABaseSimulationCameraControl::BeginPlay()
 			DragComp->OnDragPanInput.AddDynamic(this, &ABaseSimulationCameraControl::Pan);
 		}
 	}
+
+	TArray<UCameraEdgePanComponent*> EdgePanComps;
+	GetComponents(EdgePanComps);
+	for (UCameraEdgePanComponent* EdgeComp : EdgePanComps)
+	{
+		EdgeComp->OnEdgePanInput.AddDynamic(this, &ABaseSimulationCameraControl::Pan);
+	}
 }
 
 void ABaseSimulationCameraControl::Tick(float DeltaTime)
@@ -132,6 +142,43 @@ void ABaseSimulationCameraControl::Tick(float DeltaTime)
 		{
 			LastValidHitLocation += (NewLocation - GetActorLocation());
 		}
+	}
+
+	ApplyTerrainClamp();
+}
+
+void ABaseSimulationCameraControl::ApplyTerrainClamp()
+{
+	if (!bEnableGroundClamp)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FVector CurrentLocation = GetActorLocation();
+	const FVector TraceStart = CurrentLocation + FVector(0.0f, 0.0f, GroundTraceUpOffset);
+	const FVector TraceEnd   = CurrentLocation - FVector(0.0f, 0.0f, GroundTraceDownDistance);
+
+	FHitResult GroundHit;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(CameraGroundClamp), false, this);
+	QueryParams.AddIgnoredActor(this);
+
+	if (!World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, GroundTraceChannel, QueryParams))
+	{
+		return;
+	}
+
+	const float MinZ = GroundHit.ImpactPoint.Z + MinAltitudeAboveGround;
+	if (CurrentLocation.Z < MinZ)
+	{
+		const FVector ClampedLocation(CurrentLocation.X, CurrentLocation.Y, MinZ);
+		SetActorLocation(ClampedLocation);
+		TargetActorLocation.Z = MinZ;
 	}
 }
 

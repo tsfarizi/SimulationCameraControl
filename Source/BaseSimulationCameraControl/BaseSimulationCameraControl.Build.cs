@@ -11,7 +11,9 @@ public class BaseSimulationCameraControl : ModuleRules
 		PublicIncludePaths.AddRange(
 			new string[] {
 				ModuleDirectory + "/Public/Core",
+				ModuleDirectory + "/Public/Components",
 				ModuleDirectory + "/Public/Input",
+				ModuleDirectory + "/Public/Interfaces",
 			}
 			);
 
@@ -19,6 +21,7 @@ public class BaseSimulationCameraControl : ModuleRules
 		PrivateIncludePaths.AddRange(
 			new string[] {
 				ModuleDirectory + "/Private/Core",
+				ModuleDirectory + "/Private/Components",
 				ModuleDirectory + "/Private/Input",
 				ModuleDirectory + "/Private/Module",
 			}
