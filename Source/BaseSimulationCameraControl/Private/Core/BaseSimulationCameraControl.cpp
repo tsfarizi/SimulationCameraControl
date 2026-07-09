@@ -32,6 +32,12 @@ ABaseSimulationCameraControl::ABaseSimulationCameraControl()
 	Camera->SetupAttachment(SpringArm);
 	Camera->bUsePawnControlRotation = false;
 
+	// Edge-pan is created by default so the pawn pans when the cursor hovers
+	// near any viewport edge out of the box. Designers can disable it
+	// per-axis via the component's bEnableEdgePanX/Y flags in the Details
+	// panel, or remove the component entirely if edge panning is unwanted.
+	EdgePanComponent = CreateDefaultSubobject<UCameraEdgePanComponent>(TEXT("CameraEdgePan"));
+
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw  = false;
 	bUseControllerRotationRoll = false;

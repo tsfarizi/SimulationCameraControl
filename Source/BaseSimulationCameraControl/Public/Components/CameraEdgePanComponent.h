@@ -57,4 +57,7 @@ private:
 	TWeakObjectPtr<APlayerController> CachedController;
 
 	float ComputeEdgeAxis(float Cursor, float ViewportSize) const;
+
+	/** Returns the cached PlayerController, re-resolving from the owner pawn if the cache is stale. */
+	APlayerController* ResolveController();
 };

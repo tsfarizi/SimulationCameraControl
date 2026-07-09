@@ -8,6 +8,7 @@ class UCameraComponent;
 class USpringArmComponent;
 class USceneComponent;
 class UEnhancedInputComponent;
+class UCameraEdgePanComponent;
 
 UCLASS(Blueprintable)
 class BASESIMULATIONCAMERACONTROL_API ABaseSimulationCameraControl : public APawn
@@ -42,6 +43,16 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> Camera;
+
+	/**
+	 * Edge-pan component created automatically in the constructor. Drives
+	 * pan input when the cursor hovers within EdgeThreshold pixels of any
+	 * viewport edge. Active by default; opt out per-axis via
+	 * bEnableEdgePanX/bEnableEdgePanY on the component, or remove the
+	 * component entirely in the BP editor if edge panning is not wanted.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraEdgePanComponent> EdgePanComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Zoom", meta = (ClampMin = "10.0"))
 	float MinArmLength = 400.0f;

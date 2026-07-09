@@ -19,6 +19,23 @@ void UCameraEdgePanComponent::BeginPlay()
 	}
 }
 
+APlayerController* UCameraEdgePanComponent::ResolveController()
+{
+	if (APlayerController* Cached = CachedController.Get())
+	{
+		return Cached;
+	}
+	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (APlayerController* PC = Cast<APlayerController>(OwnerPawn->GetController()))
+		{
+			CachedController = PC;
+			return PC;
+		}
+	}
+	return nullptr;
+}
+
 float UCameraEdgePanComponent::ComputeEdgeAxis(float Cursor, float ViewportSize) const
 {
 	const float Denom = FMath::Max(EdgeThreshold, KINDA_SMALL_NUMBER);
@@ -38,7 +55,7 @@ void UCameraEdgePanComponent::TickComponent(float DeltaTime, ELevelTick TickType
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	APlayerController* PC = CachedController.Get();
+	APlayerController* PC = ResolveController();
 	if (!PC || EdgeThreshold <= 0.0f)
 	{
 		return;
